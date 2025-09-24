@@ -13,7 +13,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
     queryKey: ["/api/ai/recommendations"],
   });
 
-  const unreadNotifications = recommendations?.filter((r: any) => !r.isRead).length || 0;
+  const unreadNotifications = Array.isArray(recommendations) ? recommendations.filter((r: any) => !r.isRead).length : 0;
 
   // Sample motivational quotes - in a real app, this could be from an API
   const motivationalQuotes = [

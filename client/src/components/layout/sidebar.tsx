@@ -29,7 +29,7 @@ export default function Sidebar() {
 
   const overallProgress = user?.overallProgress || 0;
   const studyStreak = user?.studyStreak || 0;
-  const unreadNotifications = recommendations?.filter((r: any) => !r.isRead).length || 0;
+  const unreadNotifications = Array.isArray(recommendations) ? recommendations.filter((r: any) => !r.isRead).length : 0;
 
   const getInitials = (firstName?: string, lastName?: string) => {
     if (!firstName && !lastName) return "U";

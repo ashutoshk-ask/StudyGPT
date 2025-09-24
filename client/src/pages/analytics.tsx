@@ -328,7 +328,7 @@ export default function Analytics() {
                           {Math.floor(englishTime / 60)}m {englishTime % 60}s
                         </span>
                       </div>
-                      <Progress value={55) className="h-2" />
+                      <Progress value={55} className="h-2" />
                     </div>
 
                     <div className="pt-2 border-t border-border">

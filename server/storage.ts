@@ -99,11 +99,11 @@ export interface IStorage {
   createRecommendation(recommendation: InsertAiRecommendation): Promise<AiRecommendation>;
   markRecommendationAsRead(id: string): Promise<void>;
 
-  sessionStore: session.SessionStore;
+  sessionStore: any;
 }
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: session.SessionStore;
+  sessionStore: any;
 
   constructor() {
     this.sessionStore = new PostgresSessionStore({
