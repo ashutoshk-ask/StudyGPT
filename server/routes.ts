@@ -11,7 +11,8 @@ import {
   generateStudyRecommendations, 
   analyzeWeakTopics, 
   generatePersonalizedStudyPlan,
-  generateQuizExplanation
+  generateQuizExplanation,
+  getAIServiceHealth
 } from "./openai";
 
 function isAuthenticated(req: any, res: any, next: any) {
@@ -594,10 +595,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI recommendations routes
+  // AI service health endpoint
+  app.get("/api/ai/health", isAuthenticated, async (req, res) => {
+    try {
+      const health = getAIServiceHealth();
+      res.json(health);
+    } catch (error) {
+      console.error("Error fetching AI service health:", error);
+      res.status(500).json({ message: "Failed to fetch AI service health" });
+    }
+  });
+
   app.get("/api/ai/recommendations", isAuthenticated, async (req: any, res) => {
     try {
       const recommendations = await storage.getUserRecommendations(req.user.id);
-      res.json(recommendations);
+      const aiHealth = getAIServiceHealth();
+      res.json({ 
+        recommendations, 
+        aiServiceHealth: aiHealth 
+      });
     } catch (error) {
       console.error("Error fetching AI recommendations:", error);
       res.status(500).json({ message: "Failed to fetch AI recommendations" });
@@ -616,14 +632,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userProgress
       );
 
-      // Generate recommendations
+      // Generate recommendations (now with fallback support)
       const recommendations = await generateStudyRecommendations(
         userProgress,
         [...quizAttempts.slice(0, 5), ...mockTestAttempts.slice(0, 3)],
         weakTopics
       );
 
-      // Save recommendations to database
+      // Note: New recommendations will be added alongside existing ones
+
+      // Save new recommendations to database
       const savedRecommendations = await Promise.all(
         recommendations.map(rec => 
           storage.createRecommendation({
@@ -638,10 +656,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         )
       );
 
-      res.json(savedRecommendations);
+      const aiHealth = getAIServiceHealth();
+      res.json({ 
+        recommendations: savedRecommendations, 
+        aiServiceHealth: aiHealth,
+        usedFallback: !aiHealth.isHealthy
+      });
     } catch (error) {
       console.error("Error generating AI recommendations:", error);
-      res.status(500).json({ message: "Failed to generate AI recommendations" });
+      const aiHealth = getAIServiceHealth();
+      res.status(500).json({ 
+        message: "Failed to generate AI recommendations", 
+        aiServiceHealth: aiHealth 
+      });
     }
   });
 

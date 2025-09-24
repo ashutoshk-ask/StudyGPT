@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { 
@@ -18,15 +19,23 @@ import {
   MessageSquare,
   BookOpen,
   Target,
-  Clock
+  Clock,
+  WifiOff,
+  Shield,
+  Info
 } from "lucide-react";
 
 export default function AiTutor() {
   const { toast } = useToast();
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data: recommendations } = useQuery({
+  const { data: recommendationsData } = useQuery({
     queryKey: ["/api/ai/recommendations"],
+  });
+
+  const { data: aiHealth } = useQuery({
+    queryKey: ["/api/ai/health"],
+    refetchInterval: 30000, // Check health every 30 seconds
   });
 
   const { data: userProgress } = useQuery({
@@ -36,6 +45,16 @@ export default function AiTutor() {
   const { data: subjects } = useQuery({
     queryKey: ["/api/subjects"],
   });
+
+  // Extract recommendations and health from response with proper type checking
+  const recommendations = (recommendationsData && typeof recommendationsData === 'object' && 'recommendations' in recommendationsData && Array.isArray(recommendationsData.recommendations)) 
+    ? recommendationsData.recommendations 
+    : (recommendationsData && Array.isArray(recommendationsData)) 
+    ? recommendationsData 
+    : [];
+  const serviceHealth = (recommendationsData && typeof recommendationsData === 'object' && 'aiServiceHealth' in recommendationsData) 
+    ? recommendationsData.aiServiceHealth 
+    : aiHealth || null;
 
   const generateRecommendationsMutation = useMutation({
     mutationFn: async () => {
@@ -47,19 +66,26 @@ export default function AiTutor() {
       if (!response.ok) throw new Error("Failed to generate recommendations");
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/recommendations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/health"] });
       setRefreshing(false);
+      
+      const message = data.usedFallback 
+        ? "Recommendations updated using offline analysis (AI service temporarily unavailable)."
+        : "Fresh AI insights generated based on your latest performance.";
+      
       toast({
-        title: "Recommendations Updated!",
-        description: "Fresh AI insights based on your latest performance.",
+        title: data.usedFallback ? "Recommendations Updated (Offline Mode)" : "AI Recommendations Updated!",
+        description: message,
+        variant: data.usedFallback ? "default" : "default",
       });
     },
     onError: (error: Error) => {
       setRefreshing(false);
       toast({
         title: "Error",
-        description: error.message,
+        description: "Failed to generate recommendations. Please try again later.",
         variant: "destructive",
       });
     },
@@ -114,19 +140,54 @@ export default function AiTutor() {
     }
   };
 
-  const subjectAnalysis = subjects?.map((subject: any) => {
-    const progress = userProgress?.find((p: any) => p.subjectId === subject.id);
+  const subjectAnalysis = Array.isArray(subjects) ? subjects.map((subject: any) => {
+    const progress = Array.isArray(userProgress) ? userProgress.find((p: any) => p.subjectId === subject.id) : null;
     return {
       ...subject,
       progress: progress?.completionPercentage || 0,
       mastery: progress?.mastery || 0,
       timeSpent: progress?.timeSpent || 0,
     };
-  }) || [];
+  }) : [];
 
   const overallMastery = subjectAnalysis.length > 0 
-    ? subjectAnalysis.reduce((acc, subject) => acc + parseFloat(subject.mastery.toString()), 0) / subjectAnalysis.length 
+    ? subjectAnalysis.reduce((acc: number, subject: any) => acc + parseFloat(subject.mastery.toString()), 0) / subjectAnalysis.length 
     : 0;
+
+  // AI Service Status Component
+  const renderAIServiceStatus = () => {
+    if (!serviceHealth || typeof serviceHealth !== 'object') return null;
+    
+    const isHealthy = 'isHealthy' in serviceHealth ? serviceHealth.isHealthy : false;
+    const lastError = 'lastError' in serviceHealth ? serviceHealth.lastError : null;
+    const consecutiveFailures = 'consecutiveFailures' in serviceHealth && typeof serviceHealth.consecutiveFailures === 'number' 
+      ? serviceHealth.consecutiveFailures : 0;
+    
+    if (isHealthy) {
+      return (
+        <Alert className="mb-6 bg-accent/5 border-accent/20" data-testid="alert-ai-healthy">
+          <Shield className="h-4 w-4 text-accent" />
+          <AlertDescription className="text-accent">
+            AI services are operational. Personalized recommendations are powered by advanced AI analysis.
+          </AlertDescription>
+        </Alert>
+      );
+    } else {
+      return (
+        <Alert className="mb-6 bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800" data-testid="alert-ai-degraded">
+          <WifiOff className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+          <AlertDescription className="text-orange-800 dark:text-orange-200">
+            <strong>AI services are temporarily unavailable.</strong> You're receiving algorithmically generated recommendations based on your progress data. 
+            {consecutiveFailures > 0 && (
+              <span className="block mt-1 text-sm">
+                Don't worry - you'll still get valuable study insights tailored to your performance!
+              </span>
+            )}
+          </AlertDescription>
+        </Alert>
+      );
+    }
+  };
 
   return (
     <div className="flex h-screen bg-background">
@@ -137,6 +198,9 @@ export default function AiTutor() {
         
         <div className="p-4 lg:p-6 overflow-y-auto h-full">
           <div className="space-y-6">
+            {/* AI Service Status */}
+            {renderAIServiceStatus()}
+            
             {/* AI Overview */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card data-testid="card-ai-insights">
@@ -176,7 +240,7 @@ export default function AiTutor() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-muted-foreground text-sm">Subjects Analyzed</p>
-                      <p className="text-2xl font-bold text-foreground">{subjects?.length || 0}</p>
+                      <p className="text-2xl font-bold text-foreground">{Array.isArray(subjects) ? subjects.length : 0}</p>
                     </div>
                     <div className="w-12 h-12 bg-secondary/10 rounded-lg flex items-center justify-center">
                       <BookOpen className="h-6 w-6 text-secondary" />
