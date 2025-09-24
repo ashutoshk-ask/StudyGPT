@@ -10,16 +10,17 @@ import { Progress } from "@/components/ui/progress";
 import { Clock, FileText, TrendingUp, Users, Play, BarChart3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
+import type { MockTest, MockTestAttempt } from "@shared/schema";
 
 export default function MockTests() {
   const [activeMockTest, setActiveMockTest] = useState<any>(null);
   const { toast } = useToast();
 
-  const { data: mockTests } = useQuery({
+  const { data: mockTests = [] } = useQuery<MockTest[]>({
     queryKey: ["/api/mock-tests"],
   });
 
-  const { data: mockTestAttempts } = useQuery({
+  const { data: mockTestAttempts = [] } = useQuery<MockTestAttempt[]>({
     queryKey: ["/api/attempts/mock-test"],
   });
 
@@ -57,11 +58,11 @@ export default function MockTests() {
     );
   }
 
-  const avgScore = mockTestAttempts?.length > 0 
+  const avgScore = mockTestAttempts.length > 0 
     ? mockTestAttempts.reduce((acc: number, attempt: any) => acc + parseFloat(attempt.totalScore || 0), 0) / mockTestAttempts.length 
     : 0;
 
-  const recentAttempts = mockTestAttempts?.slice(0, 5) || [];
+  const recentAttempts = mockTestAttempts.slice(0, 5);
 
   return (
     <div className="flex h-screen bg-background">
@@ -79,7 +80,7 @@ export default function MockTests() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-muted-foreground text-sm">Tests Taken</p>
-                      <p className="text-2xl font-bold text-foreground">{mockTestAttempts?.length || 0}</p>
+                      <p className="text-2xl font-bold text-foreground">{mockTestAttempts.length}</p>
                     </div>
                     <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
                       <FileText className="h-6 w-6 text-primary" />
@@ -108,7 +109,7 @@ export default function MockTests() {
                     <div>
                       <p className="text-muted-foreground text-sm">Best Score</p>
                       <p className="text-2xl font-bold text-foreground">
-                        {mockTestAttempts?.length > 0 
+                        {mockTestAttempts.length > 0 
                           ? Math.max(...mockTestAttempts.map((a: any) => parseFloat(a.totalScore || 0))).toFixed(1)
                           : 0}%
                       </p>
@@ -126,7 +127,7 @@ export default function MockTests() {
                     <div>
                       <p className="text-muted-foreground text-sm">Time Spent</p>
                       <p className="text-2xl font-bold text-foreground">
-                        {mockTestAttempts?.length > 0
+                        {mockTestAttempts.length > 0
                           ? Math.floor(mockTestAttempts.reduce((acc: number, attempt: any) => acc + (attempt.timeTaken || 0), 0) / 3600)
                           : 0}h
                       </p>
@@ -147,7 +148,7 @@ export default function MockTests() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {mockTests?.length > 0 ? (
+                    {mockTests.length > 0 ? (
                       mockTests.map((mockTest: any) => (
                         <div 
                           key={mockTest.id} 
@@ -210,7 +211,7 @@ export default function MockTests() {
                   <div className="space-y-4">
                     {recentAttempts.length > 0 ? (
                       recentAttempts.map((attempt: any, index: number) => {
-                        const mockTest = mockTests?.find((mt: any) => mt.id === attempt.mockTestId);
+                        const mockTest = mockTests.find((mt: any) => mt.id === attempt.mockTestId);
                         const score = parseFloat(attempt.totalScore || 0);
                         const timeTaken = Math.floor((attempt.timeTaken || 0) / 60); // Convert to minutes
                         

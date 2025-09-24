@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,9 +43,13 @@ export default function MockTestInterface({ mockTest, onComplete }: MockTestInte
   const [answers, setAnswers] = useState<{ [sectionName: string]: { [questionIndex: number]: string } }>({});
   const [flagged, setFlagged] = useState<{ [key: string]: boolean }>({});
   const [timeLeft, setTimeLeft] = useState(mockTest.timeLimit * 60);
+  
+  // Refs to prevent duplicate submissions and manage timer
+  const submitted = useRef(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    const timer = setInterval(() => {
+    timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           handleSubmit();
@@ -55,7 +59,12 @@ export default function MockTestInterface({ mockTest, onComplete }: MockTestInte
       });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   }, []);
 
   const submitMockTestMutation = useMutation({
@@ -86,6 +95,18 @@ export default function MockTestInterface({ mockTest, onComplete }: MockTestInte
   });
 
   const handleSubmit = () => {
+    // Prevent duplicate submissions
+    if (submitted.current || submitMockTestMutation.isPending) {
+      return;
+    }
+    
+    // Mark as submitted and clear timer immediately
+    submitted.current = true;
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
     const timeTaken = (mockTest.timeLimit * 60) - timeLeft;
     submitMockTestMutation.mutate({
       answers,
@@ -112,13 +133,14 @@ export default function MockTestInterface({ mockTest, onComplete }: MockTestInte
 
   const clearResponse = () => {
     const section = mockTest.sections[currentSection];
-    setAnswers(prev => ({
-      ...prev,
-      [section.name]: {
-        ...prev[section.name],
-        [currentQuestion]: undefined
-      }
-    }));
+    setAnswers(prev => {
+      const sectionAnswers = { ...prev[section.name] };
+      delete sectionAnswers[currentQuestion];
+      return {
+        ...prev,
+        [section.name]: sectionAnswers
+      };
+    });
   };
 
   const formatTime = (seconds: number) => {
@@ -163,10 +185,10 @@ export default function MockTestInterface({ mockTest, onComplete }: MockTestInte
               <Button 
                 variant="destructive"
                 onClick={handleSubmit}
-                disabled={submitMockTestMutation.isPending}
+                disabled={submitMockTestMutation.isPending || submitted.current}
                 data-testid="button-submit-test"
               >
-                {submitMockTestMutation.isPending ? "Submitting..." : "Submit Test"}
+                {submitMockTestMutation.isPending ? "Submitting..." : submitted.current ? "Submitted" : "Submit Test"}
               </Button>
             </div>
           </div>
