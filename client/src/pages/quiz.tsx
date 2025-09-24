@@ -24,12 +24,12 @@ export default function Quiz() {
   });
 
   const { data: subject } = useQuery({
-    queryKey: ["/api/subjects", subjectId],
+    queryKey: [`/api/subjects/${subjectId}`],
     enabled: !!subjectId,
   });
 
   const { data: topic } = useQuery({
-    queryKey: ["/api/topics", topicId],
+    queryKey: [`/api/topics/${topicId}`],
     enabled: !!topicId,
   });
 

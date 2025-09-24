@@ -207,10 +207,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update user progress
       if (quiz.subjectId) {
+        // Get existing progress or default values
+        const existingProgress = await storage.getUserProgress(req.user.id);
+        const currentProgress = existingProgress.find(p => 
+          p.subjectId === quiz.subjectId && p.topicId === quiz.topicId
+        );
+        
+        // Calculate more realistic progress
+        const previousTimeSpent = currentProgress?.timeSpent || 0;
+        const newTimeSpent = previousTimeSpent + Math.floor(timeTaken / 60);
+        const previousMastery = currentProgress ? parseFloat(currentProgress.mastery || "0") : 0;
+        
+        // Update progress with cumulative values
         await storage.updateProgress(req.user.id, quiz.subjectId, quiz.topicId, {
-          completionPercentage: "100",
-          timeSpent: Math.floor(timeTaken / 60),
-          mastery: score.toString()
+          completionPercentage: Math.max(
+            currentProgress ? parseFloat(currentProgress.completionPercentage || "0") : 0,
+            score
+          ).toString(), // Keep highest completion percentage achieved
+          timeSpent: newTimeSpent,
+          mastery: Math.max(previousMastery, score).toString() // Keep highest score as mastery
         });
       }
 
