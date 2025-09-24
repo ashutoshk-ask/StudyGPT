@@ -195,14 +195,78 @@ export const mockTestAttempts = pgTable("mock_test_attempts", {
   isCompleted: boolean("is_completed").default(false),
 });
 
-// Study plans table
+// Study plan templates
+export const studyPlanTemplates = pgTable("study_plan_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), // intensive, balanced, revision-focused
+  description: text("description").notNull(),
+  dailyHoursRange: jsonb("daily_hours_range").notNull(), // {min: 4, max: 8}
+  subjectWeightage: jsonb("subject_weightage").notNull(), // {math: 30, reasoning: 25, english: 25, gs: 20}
+  mockTestFrequency: integer("mock_test_frequency").default(1), // per week
+  revisionCycles: integer("revision_cycles").default(3), // number of revision cycles
+  difficultyProgression: text("difficulty_progression").default("gradual"), // gradual, aggressive
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Enhanced study plans table
 export const studyPlans = pgTable("study_plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
+  templateId: varchar("template_id").references(() => studyPlanTemplates.id),
+  title: text("title").default("My Study Plan"),
   examDate: timestamp("exam_date").notNull(),
+  dailyHours: integer("daily_hours").default(4),
   weeklySchedule: jsonb("weekly_schedule").notNull(), // 7-day schedule
+  subjectPreferences: jsonb("subject_preferences"), // user's subject priorities and focus areas
+  customizations: jsonb("customizations"), // user's custom adjustments
+  milestones: jsonb("milestones"), // key milestones and target dates
+  focusAreas: jsonb("focus_areas"), // weak areas to focus on
   aiGenerated: boolean("ai_generated").default(true),
   isActive: boolean("is_active").default(true),
+  adherenceScore: decimal("adherence_score", { precision: 5, scale: 2 }).default("0"),
+  completionRate: decimal("completion_rate", { precision: 5, scale: 2 }).default("0"),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Study plan adherence tracking
+export const studyPlanAdherence = pgTable("study_plan_adherence", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  studyPlanId: varchar("study_plan_id").references(() => studyPlans.id).notNull(),
+  plannedDate: timestamp("planned_date").notNull(),
+  plannedSubject: text("planned_subject").notNull(),
+  plannedTopic: text("planned_topic").notNull(),
+  plannedDuration: integer("planned_duration_minutes").notNull(),
+  actualStartTime: timestamp("actual_start_time"),
+  actualEndTime: timestamp("actual_end_time"),
+  actualDuration: integer("actual_duration_minutes"),
+  actualSubject: text("actual_subject"),
+  actualTopic: text("actual_topic"),
+  completionStatus: text("completion_status").default("planned"), // planned, started, completed, skipped, rescheduled
+  adherenceScore: decimal("adherence_score", { precision: 5, scale: 2 }).default("0"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Study milestones and achievements
+export const studyMilestones = pgTable("study_milestones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  studyPlanId: varchar("study_plan_id").references(() => studyPlans.id),
+  type: text("type").notNull(), // weekly_goal, subject_mastery, mock_test_score, study_streak
+  title: text("title").notNull(),
+  description: text("description"),
+  targetValue: decimal("target_value", { precision: 5, scale: 2 }),
+  currentValue: decimal("current_value", { precision: 5, scale: 2 }).default("0"),
+  targetDate: timestamp("target_date"),
+  achievedDate: timestamp("achieved_date"),
+  isAchieved: boolean("is_achieved").default(false),
+  priority: integer("priority").default(1), // 1-5
+  metadata: jsonb("metadata"), // additional milestone data
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -226,9 +290,50 @@ export const usersRelations = relations(users, ({ many }) => ({
   quizAttempts: many(quizAttempts),
   mockTestAttempts: many(mockTestAttempts),
   studyPlans: many(studyPlans),
+  studyPlanAdherence: many(studyPlanAdherence),
+  studyMilestones: many(studyMilestones),
   aiRecommendations: many(aiRecommendations),
   progressHistory: many(progressHistory),
   sectionPerformance: many(sectionPerformance),
+}));
+
+export const studyPlanTemplatesRelations = relations(studyPlanTemplates, ({ many }) => ({
+  studyPlans: many(studyPlans),
+}));
+
+export const studyPlansRelations = relations(studyPlans, ({ one, many }) => ({
+  user: one(users, {
+    fields: [studyPlans.userId],
+    references: [users.id],
+  }),
+  template: one(studyPlanTemplates, {
+    fields: [studyPlans.templateId],
+    references: [studyPlanTemplates.id],
+  }),
+  adherence: many(studyPlanAdherence),
+  milestones: many(studyMilestones),
+}));
+
+export const studyPlanAdherenceRelations = relations(studyPlanAdherence, ({ one }) => ({
+  user: one(users, {
+    fields: [studyPlanAdherence.userId],
+    references: [users.id],
+  }),
+  studyPlan: one(studyPlans, {
+    fields: [studyPlanAdherence.studyPlanId],
+    references: [studyPlans.id],
+  }),
+}));
+
+export const studyMilestonesRelations = relations(studyMilestones, ({ one }) => ({
+  user: one(users, {
+    fields: [studyMilestones.userId],
+    references: [users.id],
+  }),
+  studyPlan: one(studyPlans, {
+    fields: [studyMilestones.studyPlanId],
+    references: [studyPlans.id],
+  }),
 }));
 
 export const subjectsRelations = relations(subjects, ({ many }) => ({
@@ -365,6 +470,23 @@ export const insertSectionPerformanceSchema = createInsertSchema(sectionPerforma
   updatedAt: true,
 });
 
+export const insertStudyPlanTemplateSchema = createInsertSchema(studyPlanTemplates).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertStudyPlanAdherenceSchema = createInsertSchema(studyPlanAdherence).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertStudyMilestoneSchema = createInsertSchema(studyMilestones).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -391,3 +513,9 @@ export type ProgressHistory = typeof progressHistory.$inferSelect;
 export type InsertProgressHistory = z.infer<typeof insertProgressHistorySchema>;
 export type SectionPerformance = typeof sectionPerformance.$inferSelect;
 export type InsertSectionPerformance = z.infer<typeof insertSectionPerformanceSchema>;
+export type StudyPlanTemplate = typeof studyPlanTemplates.$inferSelect;
+export type InsertStudyPlanTemplate = z.infer<typeof insertStudyPlanTemplateSchema>;
+export type StudyPlanAdherence = typeof studyPlanAdherence.$inferSelect;
+export type InsertStudyPlanAdherence = z.infer<typeof insertStudyPlanAdherenceSchema>;
+export type StudyMilestone = typeof studyMilestones.$inferSelect;
+export type InsertStudyMilestone = z.infer<typeof insertStudyMilestoneSchema>;

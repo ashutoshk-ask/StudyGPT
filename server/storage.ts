@@ -9,6 +9,9 @@ import {
   quizAttempts,
   mockTestAttempts,
   studyPlans,
+  studyPlanTemplates,
+  studyPlanAdherence,
+  studyMilestones,
   aiRecommendations,
   progressHistory,
   sectionPerformance,
@@ -31,6 +34,12 @@ import {
   type UserProgress,
   type StudyPlan,
   type InsertStudyPlan,
+  type StudyPlanTemplate,
+  type InsertStudyPlanTemplate,
+  type StudyPlanAdherence,
+  type InsertStudyPlanAdherence,
+  type StudyMilestone,
+  type InsertStudyMilestone,
   type AiRecommendation,
   type InsertAiRecommendation,
   type ProgressHistory,
@@ -99,6 +108,30 @@ export interface IStorage {
   getUserStudyPlan(userId: string): Promise<StudyPlan | undefined>;
   createStudyPlan(plan: InsertStudyPlan): Promise<StudyPlan>;
   updateStudyPlan(id: string, updates: Partial<StudyPlan>): Promise<StudyPlan>;
+  deleteStudyPlan(id: string): Promise<void>;
+  getAllUserStudyPlans(userId: string): Promise<StudyPlan[]>;
+
+  // Study plan template operations
+  getStudyPlanTemplates(): Promise<StudyPlanTemplate[]>;
+  getStudyPlanTemplate(id: string): Promise<StudyPlanTemplate | undefined>;
+  createStudyPlanTemplate(template: InsertStudyPlanTemplate): Promise<StudyPlanTemplate>;
+
+  // Study plan adherence operations
+  getStudyPlanAdherence(userId: string, studyPlanId?: string): Promise<StudyPlanAdherence[]>;
+  createStudyPlanAdherence(adherence: InsertStudyPlanAdherence): Promise<StudyPlanAdherence>;
+  updateStudyPlanAdherence(id: string, updates: Partial<StudyPlanAdherence>): Promise<StudyPlanAdherence>;
+  getAdherenceMetrics(userId: string, studyPlanId: string): Promise<{
+    totalSessions: number;
+    completedSessions: number;
+    adherenceRate: number;
+    averageScore: number;
+  }>;
+
+  // Study milestone operations
+  getStudyMilestones(userId: string, studyPlanId?: string): Promise<StudyMilestone[]>;
+  createStudyMilestone(milestone: InsertStudyMilestone): Promise<StudyMilestone>;
+  updateStudyMilestone(id: string, updates: Partial<StudyMilestone>): Promise<StudyMilestone>;
+  markMilestoneAchieved(id: string): Promise<StudyMilestone>;
 
   // AI recommendation operations
   getUserRecommendations(userId: string): Promise<AiRecommendation[]>;
@@ -374,6 +407,203 @@ export class DatabaseStorage implements IStorage {
       .where(eq(studyPlans.id, id))
       .returning();
     return plan;
+  }
+
+  async deleteStudyPlan(id: string): Promise<void> {
+    await db.delete(studyPlans).where(eq(studyPlans.id, id));
+  }
+
+  async getAllUserStudyPlans(userId: string): Promise<StudyPlan[]> {
+    return await db
+      .select()
+      .from(studyPlans)
+      .where(eq(studyPlans.userId, userId))
+      .orderBy(desc(studyPlans.createdAt));
+  }
+
+  // Study plan template operations
+  async getStudyPlanTemplates(): Promise<StudyPlanTemplate[]> {
+    try {
+      return await db
+        .select()
+        .from(studyPlanTemplates)
+        .where(eq(studyPlanTemplates.isActive, true))
+        .orderBy(asc(studyPlanTemplates.name));
+    } catch (error) {
+      console.log("Study plan templates table not available yet, returning default templates");
+      return [
+        {
+          id: 'intensive',
+          name: 'intensive',
+          description: 'High-intensity study plan for dedicated preparation',
+          dailyHoursRange: { min: 6, max: 10 },
+          subjectWeightage: { Mathematics: 30, Reasoning: 25, English: 25, 'General Studies': 20 },
+          mockTestFrequency: 2,
+          revisionCycles: 4,
+          difficultyProgression: 'aggressive',
+          isActive: true,
+          createdAt: new Date()
+        },
+        {
+          id: 'balanced',
+          name: 'balanced',
+          description: 'Well-balanced study plan for steady progress',
+          dailyHoursRange: { min: 4, max: 6 },
+          subjectWeightage: { Mathematics: 25, Reasoning: 25, English: 25, 'General Studies': 25 },
+          mockTestFrequency: 1,
+          revisionCycles: 3,
+          difficultyProgression: 'gradual',
+          isActive: true,
+          createdAt: new Date()
+        },
+        {
+          id: 'revision',
+          name: 'revision-focused',
+          description: 'Revision-focused plan for final preparation',
+          dailyHoursRange: { min: 3, max: 5 },
+          subjectWeightage: { Mathematics: 20, Reasoning: 20, English: 20, 'General Studies': 20 },
+          mockTestFrequency: 3,
+          revisionCycles: 5,
+          difficultyProgression: 'gradual',
+          isActive: true,
+          createdAt: new Date()
+        }
+      ] as StudyPlanTemplate[];
+    }
+  }
+
+  async getStudyPlanTemplate(id: string): Promise<StudyPlanTemplate | undefined> {
+    try {
+      const [template] = await db
+        .select()
+        .from(studyPlanTemplates)
+        .where(eq(studyPlanTemplates.id, id));
+      return template;
+    } catch (error) {
+      const templates = await this.getStudyPlanTemplates();
+      return templates.find(t => t.id === id);
+    }
+  }
+
+  async createStudyPlanTemplate(insertTemplate: InsertStudyPlanTemplate): Promise<StudyPlanTemplate> {
+    const [template] = await db.insert(studyPlanTemplates).values(insertTemplate).returning();
+    return template;
+  }
+
+  // Study plan adherence operations
+  async getStudyPlanAdherence(userId: string, studyPlanId?: string): Promise<StudyPlanAdherence[]> {
+    try {
+      let query = db.select().from(studyPlanAdherence).where(eq(studyPlanAdherence.userId, userId));
+      
+      if (studyPlanId) {
+        query = query.where(eq(studyPlanAdherence.studyPlanId, studyPlanId));
+      }
+      
+      return await query.orderBy(desc(studyPlanAdherence.plannedDate));
+    } catch (error) {
+      console.log("Study plan adherence table not available yet, returning empty array");
+      return [];
+    }
+  }
+
+  async createStudyPlanAdherence(insertAdherence: InsertStudyPlanAdherence): Promise<StudyPlanAdherence> {
+    const [adherence] = await db.insert(studyPlanAdherence).values(insertAdherence).returning();
+    return adherence;
+  }
+
+  async updateStudyPlanAdherence(id: string, updates: Partial<StudyPlanAdherence>): Promise<StudyPlanAdherence> {
+    const [adherence] = await db
+      .update(studyPlanAdherence)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(studyPlanAdherence.id, id))
+      .returning();
+    return adherence;
+  }
+
+  async getAdherenceMetrics(userId: string, studyPlanId: string): Promise<{
+    totalSessions: number;
+    completedSessions: number;
+    adherenceRate: number;
+    averageScore: number;
+  }> {
+    try {
+      const adherenceData = await db
+        .select()
+        .from(studyPlanAdherence)
+        .where(and(
+          eq(studyPlanAdherence.userId, userId),
+          eq(studyPlanAdherence.studyPlanId, studyPlanId)
+        ));
+
+      const totalSessions = adherenceData.length;
+      const completedSessions = adherenceData.filter(session => session.completionStatus === 'completed').length;
+      const adherenceRate = totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0;
+      
+      const completedWithScores = adherenceData.filter(session => 
+        session.completionStatus === 'completed' && session.adherenceScore
+      );
+      const averageScore = completedWithScores.length > 0 
+        ? completedWithScores.reduce((sum, session) => sum + parseFloat(session.adherenceScore || '0'), 0) / completedWithScores.length
+        : 0;
+
+      return {
+        totalSessions,
+        completedSessions,
+        adherenceRate,
+        averageScore
+      };
+    } catch (error) {
+      console.log("Study plan adherence table not available yet, returning default metrics");
+      return {
+        totalSessions: 0,
+        completedSessions: 0,
+        adherenceRate: 0,
+        averageScore: 0
+      };
+    }
+  }
+
+  // Study milestone operations
+  async getStudyMilestones(userId: string, studyPlanId?: string): Promise<StudyMilestone[]> {
+    try {
+      let query = db.select().from(studyMilestones).where(eq(studyMilestones.userId, userId));
+      
+      if (studyPlanId) {
+        query = query.where(eq(studyMilestones.studyPlanId, studyPlanId));
+      }
+      
+      return await query.orderBy(asc(studyMilestones.priority), desc(studyMilestones.targetDate));
+    } catch (error) {
+      console.log("Study milestones table not available yet, returning empty array");
+      return [];
+    }
+  }
+
+  async createStudyMilestone(insertMilestone: InsertStudyMilestone): Promise<StudyMilestone> {
+    const [milestone] = await db.insert(studyMilestones).values(insertMilestone).returning();
+    return milestone;
+  }
+
+  async updateStudyMilestone(id: string, updates: Partial<StudyMilestone>): Promise<StudyMilestone> {
+    const [milestone] = await db
+      .update(studyMilestones)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(studyMilestones.id, id))
+      .returning();
+    return milestone;
+  }
+
+  async markMilestoneAchieved(id: string): Promise<StudyMilestone> {
+    const [milestone] = await db
+      .update(studyMilestones)
+      .set({ 
+        isAchieved: true, 
+        achievedDate: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(studyMilestones.id, id))
+      .returning();
+    return milestone;
   }
 
   // AI recommendation operations
