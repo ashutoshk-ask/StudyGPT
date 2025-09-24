@@ -33,20 +33,20 @@ export default function Dashboard() {
     queryKey: ["/api/ai/recommendations"],
   });
 
-  const subjectProgress = subjects?.map((subject: any) => {
-    const progress = userProgress?.find((p: any) => p.subjectId === subject.id);
+  const subjectProgress = Array.isArray(subjects) ? subjects.map((subject: any) => {
+    const progress = Array.isArray(userProgress) ? userProgress.find((p: any) => p.subjectId === subject.id) : null;
     return {
       ...subject,
       progress: progress?.completionPercentage || 0,
       completedTopics: progress?.timeSpent || 0,
       totalTopics: subject.totalTopics || 20,
     };
-  }) || [];
+  }) : [];
 
   const stats = {
     overallProgress: user?.overallProgress || 0,
-    mockTests: mockTestAttempts?.length || 0,
-    avgScore: mockTestAttempts?.length > 0 
+    mockTests: Array.isArray(mockTestAttempts) ? mockTestAttempts.length : 0,
+    avgScore: Array.isArray(mockTestAttempts) && mockTestAttempts.length > 0 
       ? mockTestAttempts.reduce((acc: number, attempt: any) => acc + parseFloat(attempt.totalScore || 0), 0) / mockTestAttempts.length 
       : 0,
     studyHours: user?.totalStudyHours || 0,
@@ -139,14 +139,14 @@ export default function Dashboard() {
               </Card>
 
               {/* AI Recommendations */}
-              <AiRecommendations recommendations={recommendations || []} />
+              <AiRecommendations recommendations={Array.isArray(recommendations) ? recommendations : []} />
             </div>
 
             {/* Recent Activity and Study Plan */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <RecentActivity 
-                quizAttempts={quizAttempts?.slice(0, 5) || []} 
-                mockTestAttempts={mockTestAttempts?.slice(0, 3) || []} 
+                quizAttempts={Array.isArray(quizAttempts) ? quizAttempts.slice(0, 5) : []} 
+                mockTestAttempts={Array.isArray(mockTestAttempts) ? mockTestAttempts.slice(0, 3) : []} 
               />
               <StudyPlanToday />
             </div>

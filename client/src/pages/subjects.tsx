@@ -32,8 +32,8 @@ export default function Subjects() {
     enabled: !!selectedSubject,
   });
 
-  const subjectWithProgress = subjects?.map((subject: any) => {
-    const progress = userProgress?.find((p: any) => p.subjectId === subject.id);
+  const subjectWithProgress = Array.isArray(subjects) ? subjects.map((subject: any) => {
+    const progress = Array.isArray(userProgress) ? userProgress.find((p: any) => p.subjectId === subject.id) : null;
     const IconComponent = subjectIcons[subject.name as keyof typeof subjectIcons] || BookOpen;
     
     return {
@@ -43,7 +43,7 @@ export default function Subjects() {
       timeSpent: progress?.timeSpent || 0,
       icon: IconComponent,
     };
-  }) || [];
+  }) : [];
 
   return (
     <div className="flex h-screen bg-background">
@@ -185,7 +185,7 @@ export default function Subjects() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {topics?.length > 0 ? (
+                        {Array.isArray(topics) && topics.length > 0 ? (
                           topics.map((topic: any) => (
                             <div 
                               key={topic.id} 

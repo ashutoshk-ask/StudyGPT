@@ -13,12 +13,14 @@ import MockTests from "@/pages/mock-tests";
 import Analytics from "@/pages/analytics";
 import StudyPlan from "@/pages/study-plan";
 import AiTutor from "@/pages/ai-tutor";
+import Quiz from "@/pages/quiz";
 
 function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/subjects" component={Subjects} />
+      <ProtectedRoute path="/quiz" component={Quiz} />
       <ProtectedRoute path="/mock-tests" component={MockTests} />
       <ProtectedRoute path="/analytics" component={Analytics} />
       <ProtectedRoute path="/study-plan" component={StudyPlan} />
