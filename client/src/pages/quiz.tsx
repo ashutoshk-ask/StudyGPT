@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { Subject, Topic, Quiz as SchemaQuiz, Question, QuizWithQuestions } from "@shared/schema";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import QuizInterface from "@/components/quiz/quiz-interface";
@@ -9,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Clock, BookOpen, ArrowLeft } from "lucide-react";
 
+
 export default function Quiz() {
   const [location, navigate] = useLocation();
-  const [selectedQuiz, setSelectedQuiz] = useState<any>(null);
+  const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [showQuizInterface, setShowQuizInterface] = useState(false);
   
   // Get query parameters
@@ -19,34 +21,62 @@ export default function Quiz() {
   const subjectId = urlParams.get('subject');
   const topicId = urlParams.get('topic');
 
-  const { data: quizzes, isLoading } = useQuery({
+  const { data: quizzes, isLoading } = useQuery<SchemaQuiz[]>({
     queryKey: ["/api/quizzes", { subjectId, topicId }],
   });
 
-  const { data: subject } = useQuery({
+  // Fetch individual quiz with questions when starting a quiz
+  const { data: selectedQuizData, isLoading: isLoadingQuizDetails } = useQuery<QuizWithQuestions>({
+    queryKey: [`/api/quizzes/${selectedQuizId}`],
+    enabled: !!selectedQuizId && showQuizInterface,
+  });
+
+  const { data: subject } = useQuery<Subject>({
     queryKey: [`/api/subjects/${subjectId}`],
     enabled: !!subjectId,
   });
 
-  const { data: topic } = useQuery({
+  const { data: topic } = useQuery<Topic>({
     queryKey: [`/api/topics/${topicId}`],
     enabled: !!topicId,
   });
 
   const handleQuizComplete = (results: any) => {
     setShowQuizInterface(false);
-    setSelectedQuiz(null);
+    setSelectedQuizId(null);
     // Navigate to results or back to subjects
     navigate('/subjects');
   };
 
-  const startQuiz = (quiz: any) => {
-    setSelectedQuiz(quiz);
+  const startQuiz = (quiz: SchemaQuiz) => {
+    setSelectedQuizId(quiz.id);
     setShowQuizInterface(true);
   };
 
-  if (showQuizInterface && selectedQuiz) {
-    return <QuizInterface quiz={selectedQuiz} onComplete={handleQuizComplete} />;
+  if (showQuizInterface) {
+    if (isLoadingQuizDetails || !selectedQuizData) {
+      return (
+        <div className="flex h-screen bg-background">
+          <Sidebar />
+          <main className="flex-1 overflow-hidden">
+            <Header title="Loading Quiz..." subtitle="Please wait while we prepare your quiz" />
+            <div className="p-4 lg:p-6 overflow-y-auto h-full">
+              <div className="max-w-4xl mx-auto">
+                <Card>
+                  <CardContent className="p-8">
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      <p className="text-lg">Loading quiz details...</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </main>
+        </div>
+      );
+    }
+    return <QuizInterface quiz={selectedQuizData} onComplete={handleQuizComplete} />;
   }
 
   return (
@@ -83,12 +113,12 @@ export default function Quiz() {
               </div>
             ) : Array.isArray(quizzes) && quizzes.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {quizzes.map((quiz: any) => (
+                {quizzes.map((quiz: SchemaQuiz) => (
                   <Card key={quiz.id} className="hover:shadow-md transition-all" data-testid={`card-quiz-${quiz.id}`}>
                     <CardHeader>
                       <div className="flex justify-between items-start">
                         <CardTitle className="text-lg">{quiz.title}</CardTitle>
-                        <Badge variant="outline">{quiz.difficulty || 'Mixed'}</Badge>
+                        <Badge variant="outline">Mixed</Badge>
                       </div>
                     </CardHeader>
                     <CardContent>

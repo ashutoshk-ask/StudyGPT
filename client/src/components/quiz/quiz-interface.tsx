@@ -6,29 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Flag, ChevronLeft, ChevronRight } from "lucide-react";
+import { QuizWithQuestions, Question } from "@shared/schema";
 import QuestionPalette from "./question-palette";
 
-interface Question {
-  id: string;
-  questionText: string;
-  options: string[];
-  correctAnswer: string;
-  explanation?: string;
-  difficulty: string;
-  marks: string;
-  negativeMarks: string;
-}
-
-interface Quiz {
-  id: string;
-  title: string;
-  description: string;
-  timeLimit: number;
-  questions: Question[];
-}
-
 interface QuizInterfaceProps {
-  quiz: Quiz;
+  quiz: QuizWithQuestions | null;
   onComplete: (results: any) => void;
 }
 
@@ -37,10 +19,19 @@ export default function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) 
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<{ [key: number]: string }>({});
   const [flagged, setFlagged] = useState<{ [key: number]: boolean }>({});
-  const [timeLeft, setTimeLeft] = useState(quiz.timeLimit * 60); // Convert to seconds
+  const [timeLeft, setTimeLeft] = useState(0);
   const [showResults, setShowResults] = useState(false);
 
+  // Initialize timer when quiz data is available
   useEffect(() => {
+    if (quiz?.timeLimit) {
+      setTimeLeft(quiz.timeLimit * 60);
+    }
+  }, [quiz?.timeLimit]);
+
+  useEffect(() => {
+    if (!quiz || timeLeft === 0) return;
+    
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -52,10 +43,11 @@ export default function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) 
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [quiz, timeLeft]);
 
   const submitQuizMutation = useMutation({
     mutationFn: async (data: { answers: any; timeTaken: number }) => {
+      if (!quiz?.id) throw new Error("Quiz not found");
       const response = await fetch(`/api/quizzes/${quiz.id}/attempt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -83,6 +75,7 @@ export default function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) 
   });
 
   const handleSubmit = () => {
+    if (!quiz?.timeLimit) return;
     const timeTaken = (quiz.timeLimit * 60) - timeLeft;
     const formattedAnswers = Object.keys(answers).map(key => answers[parseInt(key)]);
     
@@ -106,6 +99,22 @@ export default function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) 
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
+  // Early return for loading state
+  if (!quiz || !quiz.questions || quiz.questions.length === 0) {
+    return (
+      <div className="space-y-6" data-testid="quiz-loading">
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex items-center justify-center space-x-2">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <p className="text-lg">Loading quiz...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const progress = ((currentQuestion + 1) / quiz.questions.length) * 100;
   const currentQ = quiz.questions[currentQuestion];
 
@@ -126,9 +135,9 @@ export default function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) 
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-xl font-bold text-foreground" data-testid="quiz-title">
-                {quiz.title}
+                {quiz?.title || 'Quiz'}
               </h2>
-              <p className="text-muted-foreground">{quiz.description}</p>
+              <p className="text-muted-foreground">{quiz?.description || ''}</p>
             </div>
             <div className="flex items-center space-x-4">
               <div className="text-center">
@@ -139,7 +148,7 @@ export default function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) 
               </div>
               <div className="text-center">
                 <p className="text-lg font-semibold text-foreground" data-testid="question-progress">
-                  {currentQuestion + 1}/{quiz.questions.length}
+                  {currentQuestion + 1}/{quiz?.questions?.length || 0}
                 </p>
                 <p className="text-xs text-muted-foreground">Questions</p>
               </div>
@@ -156,20 +165,20 @@ export default function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) 
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-foreground" data-testid="question-text">
-                Q{currentQuestion + 1}. {currentQ.questionText}
+                Q{currentQuestion + 1}. {currentQ?.questionText || 'Loading question...'}
               </h3>
               <div className="flex items-center space-x-2">
                 <Badge variant="outline" data-testid="question-difficulty">
-                  {currentQ.difficulty}
+                  {currentQ?.difficulty || 'N/A'}
                 </Badge>
                 <Badge variant="secondary" data-testid="question-marks">
-                  +{currentQ.marks} / -{currentQ.negativeMarks}
+                  +{currentQ?.marks || '0'} / -{currentQ?.negativeMarks || '0'}
                 </Badge>
               </div>
             </div>
             
             <div className="space-y-3">
-              {currentQ.options.map((option, index) => {
+              {currentQ?.options?.map((option, index) => {
                 const optionLetter = String.fromCharCode(65 + index); // A, B, C, D
                 const isSelected = answers[currentQuestion] === option;
                 
@@ -222,7 +231,7 @@ export default function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) 
                 Previous
               </Button>
               
-              {currentQuestion === quiz.questions.length - 1 ? (
+              {currentQuestion === (quiz?.questions?.length || 1) - 1 ? (
                 <Button
                   onClick={handleSubmit}
                   disabled={submitQuizMutation.isPending}
@@ -232,7 +241,7 @@ export default function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) 
                 </Button>
               ) : (
                 <Button
-                  onClick={() => setCurrentQuestion(Math.min(quiz.questions.length - 1, currentQuestion + 1))}
+                  onClick={() => setCurrentQuestion(Math.min((quiz?.questions?.length || 1) - 1, currentQuestion + 1))}
                   data-testid="button-next"
                 >
                   Next
@@ -246,7 +255,7 @@ export default function QuizInterface({ quiz, onComplete }: QuizInterfaceProps) 
 
       {/* Question Palette */}
       <QuestionPalette
-        questions={quiz.questions}
+        questions={quiz?.questions || []}
         currentQuestion={currentQuestion}
         answers={answers}
         flagged={flagged}

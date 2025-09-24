@@ -494,7 +494,9 @@ export type Subject = typeof subjects.$inferSelect;
 export type InsertSubject = z.infer<typeof insertSubjectSchema>;
 export type Topic = typeof topics.$inferSelect;
 export type InsertTopic = z.infer<typeof insertTopicSchema>;
-export type Question = typeof questions.$inferSelect;
+export type Question = typeof questions.$inferSelect & {
+  options: string[];
+};
 export type InsertQuestion = z.infer<typeof insertQuestionSchema>;
 export type Quiz = typeof quizzes.$inferSelect;
 export type InsertQuiz = z.infer<typeof insertQuizSchema>;
@@ -519,3 +521,8 @@ export type StudyPlanAdherence = typeof studyPlanAdherence.$inferSelect;
 export type InsertStudyPlanAdherence = z.infer<typeof insertStudyPlanAdherenceSchema>;
 export type StudyMilestone = typeof studyMilestones.$inferSelect;
 export type InsertStudyMilestone = z.infer<typeof insertStudyMilestoneSchema>;
+
+// Quiz with populated questions type
+export type QuizWithQuestions = Quiz & {
+  questions: Question[];
+};

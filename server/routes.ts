@@ -227,19 +227,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Quiz not found" });
       }
 
-      // Get questions for the quiz
+      // Get questions for the quiz - GUARANTEE all questions or fail fast
       const questionIds = quiz.questionIds as string[];
       const questions = await Promise.all(
-        questionIds.map(id => storage.getQuestion(id))
+        questionIds.map(async id => {
+          const question = await storage.getQuestion(id);
+          if (!question) {
+            throw new Error(`Question ${id} not found - cannot return incomplete quiz data`);
+          }
+          return question;
+        })
       );
 
+      // At this point, we GUARANTEE all questions are loaded
       res.json({
         ...quiz,
-        questions: questions.filter(q => q !== undefined)
+        questions
       });
     } catch (error) {
       console.error("Error fetching quiz:", error);
-      res.status(500).json({ message: "Failed to fetch quiz" });
+      // Return 500 if ANY question fails to load - no partial data
+      res.status(500).json({ message: "Failed to fetch quiz with complete question data" });
     }
   });
 

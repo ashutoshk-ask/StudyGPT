@@ -42,7 +42,13 @@ export function setupAuth(app: Express) {
     store: new PostgresSessionStore({
       conString: process.env.DATABASE_URL,
       createTableIfMissing: false,
+      tableName: 'session'
     }),
+    cookie: {
+      secure: false, // Set to true in production with HTTPS
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
   };
 
   app.set("trust proxy", 1);
@@ -52,11 +58,24 @@ export function setupAuth(app: Express) {
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
-      const user = await storage.getUserByUsername(username);
-      if (!user || !(await comparePasswords(password, user.password))) {
-        return done(null, false);
-      } else {
+      try {
+        const user = await storage.getUserByUsername(username);
+        if (!user) {
+          console.log("User not found:", username);
+          return done(null, false);
+        }
+        
+        const passwordMatch = await comparePasswords(password, user.password);
+        if (!passwordMatch) {
+          console.log("Password mismatch for user:", username);
+          return done(null, false);
+        }
+        
+        console.log("Authentication successful for user:", username);
         return done(null, user);
+      } catch (error) {
+        console.error("Authentication error:", error);
+        return done(error);
       }
     }),
   );
