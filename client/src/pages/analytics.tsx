@@ -14,6 +14,24 @@ import {
   Target,
   Brain
 } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  BarChart,
+  Bar,
+  Legend
+} from "recharts";
+import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 
 export default function Analytics() {
   const { data: progressAnalytics } = useQuery({
@@ -176,15 +194,97 @@ export default function Analytics() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-64 bg-muted/20 rounded-lg flex items-center justify-center">
-                    <div className="text-center text-muted-foreground">
-                      <ChartLine className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p className="font-medium">Performance Chart</p>
-                      <p className="text-sm">Shows your progress over time</p>
-                      <p className="text-xs mt-2">
-                        Recent trend: {avgMockScore > avgQuizScore ? "Improving" : "Stable"}
-                      </p>
-                    </div>
+                  <div className="h-64">
+                    <ChartContainer
+                      config={{
+                        quiz: {
+                          label: "Quiz Score",
+                          color: "hsl(var(--chart-1))",
+                        },
+                        mock: {
+                          label: "Mock Test Score",
+                          color: "hsl(var(--chart-2))",
+                        },
+                      }}
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={(
+                            progressHistory && progressHistory.length > 0
+                              ? progressHistory
+                                  .filter(h => h.scoreObtained !== null)
+                                  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                                  .map((h, idx) => ({
+                                    date: new Date(h.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                                    quiz: h.progressType === 'quiz' ? parseFloat(h.scoreObtained || '0') : null,
+                                    mock: h.progressType === 'mock_test' ? parseFloat(h.scoreObtained || '0') : null,
+                                    combined: parseFloat(h.scoreObtained || '0')
+                                  }))
+                              : [
+                                { date: 'Week 1', quiz: avgQuizScore * 0.8, mock: avgMockScore * 0.7, combined: (avgQuizScore + avgMockScore) / 2 * 0.75 },
+                                { date: 'Week 2', quiz: avgQuizScore * 0.9, mock: avgMockScore * 0.85, combined: (avgQuizScore + avgMockScore) / 2 * 0.875 },
+                                { date: 'Week 3', quiz: avgQuizScore, mock: avgMockScore, combined: (avgQuizScore + avgMockScore) / 2 }
+                              ]
+                          )}
+                          margin={{
+                            top: 5,
+                            right: 30,
+                            left: 20,
+                            bottom: 5,
+                          }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis 
+                            dataKey="date" 
+                            className="fill-muted-foreground text-xs"
+                            tick={{ fontSize: 12 }}
+                          />
+                          <YAxis 
+                            className="fill-muted-foreground text-xs"
+                            tick={{ fontSize: 12 }}
+                            domain={[0, 100]}
+                          />
+                          <Tooltip 
+                            content={<ChartTooltipContent />}
+                            contentStyle={{
+                              backgroundColor: 'hsl(var(--background))',
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '6px',
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="combined"
+                            stroke="var(--color-quiz)"
+                            strokeWidth={2}
+                            dot={{ fill: 'var(--color-quiz)', strokeWidth: 2, r: 4 }}
+                            activeDot={{ r: 6, stroke: 'var(--color-quiz)', strokeWidth: 2 }}
+                          />
+                          {progressHistory && progressHistory.length > 0 && (
+                            <>
+                              <Line
+                                type="monotone"
+                                dataKey="quiz"
+                                stroke="var(--color-quiz)"
+                                strokeWidth={1.5}
+                                strokeDasharray="5 5"
+                                dot={false}
+                                connectNulls={false}
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="mock"
+                                stroke="var(--color-mock)"
+                                strokeWidth={1.5}
+                                strokeDasharray="5 5"
+                                dot={false}
+                                connectNulls={false}
+                              />
+                            </>
+                          )}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
                   </div>
                 </CardContent>
               </Card>
@@ -197,23 +297,106 @@ export default function Analytics() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-64 bg-muted/20 rounded-lg flex items-center justify-center">
-                    <div className="text-center text-muted-foreground">
-                      <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p className="font-medium">Radar Chart</p>
-                      <p className="text-sm">Subject-wise performance analysis</p>
-                      <div className="text-xs mt-2 space-y-1">
-                        {subjectAnalysis.slice(0, 4).map((subject, index) => (
-                          <div key={index} className="flex justify-between">
-                            <span>{subject.name}:</span>
-                            <span className={subject.accuracy >= 75 ? "text-accent" : 
-                                           subject.accuracy >= 60 ? "text-secondary" : "text-destructive"}>
-                              {subject.accuracy.toFixed(0)}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  <div className="h-64">
+                    <ChartContainer
+                      config={{
+                        accuracy: {
+                          label: "Accuracy %",
+                          color: "hsl(var(--chart-3))",
+                        },
+                        timeSpent: {
+                          label: "Time Spent (hrs)",
+                          color: "hsl(var(--chart-4))",
+                        },
+                      }}
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart
+                          data={
+                            subjectAnalysis && subjectAnalysis.length > 0
+                              ? subjectAnalysis.map(subject => ({
+                                  subject: subject.name.substring(0, 8), // Truncate long names
+                                  accuracy: subject.accuracy || 0,
+                                  timeSpent: Math.min(subject.timeSpent || 0, 100), // Cap at 100 for radar visibility
+                                  fullValue: subject.accuracy || 0
+                                }))
+                              : [
+                                  { subject: "Math", accuracy: 75, timeSpent: 40, fullValue: 75 },
+                                  { subject: "Reasoning", accuracy: 68, timeSpent: 35, fullValue: 68 },
+                                  { subject: "English", accuracy: 82, timeSpent: 25, fullValue: 82 },
+                                  { subject: "GS", accuracy: 71, timeSpent: 30, fullValue: 71 }
+                                ]
+                          }
+                          margin={{
+                            top: 20,
+                            right: 30,
+                            bottom: 20,
+                            left: 30,
+                          }}
+                        >
+                          <PolarGrid className="stroke-muted" />
+                          <PolarAngleAxis 
+                            dataKey="subject" 
+                            className="fill-muted-foreground text-xs"
+                            tick={{ fontSize: 12 }}
+                          />
+                          <PolarRadiusAxis
+                            angle={90}
+                            domain={[0, 100]}
+                            className="fill-muted-foreground text-xs"
+                            tick={{ fontSize: 10 }}
+                            tickCount={5}
+                          />
+                          <Radar
+                            name="Accuracy"
+                            dataKey="accuracy"
+                            stroke="var(--color-accuracy)"
+                            fill="var(--color-accuracy)"
+                            fillOpacity={0.3}
+                            strokeWidth={2}
+                            dot={{ fill: 'var(--color-accuracy)', strokeWidth: 2, r: 4 }}
+                          />
+                          <Tooltip 
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                  <div className="rounded-lg border bg-background p-2 shadow-md">
+                                    <div className="grid gap-2">
+                                      <div className="flex flex-col">
+                                        <span className="text-[0.70rem] uppercase text-muted-foreground">
+                                          Subject
+                                        </span>
+                                        <span className="font-bold text-muted-foreground">
+                                          {data.subject}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col">
+                                        <span className="text-[0.70rem] uppercase text-muted-foreground">
+                                          Accuracy
+                                        </span>
+                                        <span className="font-bold text-foreground">
+                                          {data.fullValue.toFixed(1)}%
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col">
+                                        <span className="text-[0.70rem] uppercase text-muted-foreground">
+                                          Time Spent
+                                        </span>
+                                        <span className="font-bold text-foreground">
+                                          {data.timeSpent}h
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
                   </div>
                 </CardContent>
               </Card>
@@ -304,6 +487,120 @@ export default function Analytics() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {/* Time Analysis Bar Chart */}
+                  <div className="h-48 mb-6">
+                    <ChartContainer
+                      config={{
+                        timeSpent: {
+                          label: "Time Spent (hrs)",
+                          color: "hsl(var(--chart-2))",
+                        },
+                        avgTime: {
+                          label: "Avg per Question (s)",
+                          color: "hsl(var(--chart-1))",
+                        },
+                      }}
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={[
+                            {
+                              subject: "Math",
+                              timeSpent: subjectAnalysis?.find(s => s.name.toLowerCase().includes('math'))?.timeSpent || 40,
+                              avgTime: mathTime / 10, // Convert to 10s of seconds for visibility
+                              rawTime: mathTime,
+                            },
+                            {
+                              subject: "Reasoning", 
+                              timeSpent: subjectAnalysis?.find(s => s.name.toLowerCase().includes('reasoning'))?.timeSpent || 35,
+                              avgTime: reasoningTime / 10,
+                              rawTime: reasoningTime,
+                            },
+                            {
+                              subject: "English",
+                              timeSpent: subjectAnalysis?.find(s => s.name.toLowerCase().includes('english'))?.timeSpent || 25,
+                              avgTime: englishTime / 10,
+                              rawTime: englishTime,
+                            },
+                            {
+                              subject: "GS",
+                              timeSpent: subjectAnalysis?.find(s => s.name.toLowerCase().includes('general') || s.name.toLowerCase().includes('gs'))?.timeSpent || 30,
+                              avgTime: gsTime / 10,
+                              rawTime: gsTime,
+                            },
+                          ]}
+                          margin={{
+                            top: 20,
+                            right: 30,
+                            left: 20,
+                            bottom: 5,
+                          }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis 
+                            dataKey="subject" 
+                            className="fill-muted-foreground text-xs"
+                            tick={{ fontSize: 12 }}
+                          />
+                          <YAxis 
+                            yAxisId="left"
+                            className="fill-muted-foreground text-xs"
+                            tick={{ fontSize: 12 }}
+                          />
+                          <YAxis 
+                            yAxisId="right" 
+                            orientation="right"
+                            className="fill-muted-foreground text-xs"
+                            tick={{ fontSize: 12 }}
+                          />
+                          <Tooltip 
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                  <div className="rounded-lg border bg-background p-2 shadow-md">
+                                    <div className="grid gap-2">
+                                      <div className="flex flex-col">
+                                        <span className="text-[0.70rem] uppercase text-muted-foreground">
+                                          {data.subject}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col">
+                                        <span className="text-[0.70rem] uppercase text-muted-foreground">
+                                          Total Time
+                                        </span>
+                                        <span className="font-bold text-foreground">
+                                          {data.timeSpent}h
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col">
+                                        <span className="text-[0.70rem] uppercase text-muted-foreground">
+                                          Avg per Question
+                                        </span>
+                                        <span className="font-bold text-foreground">
+                                          {Math.floor(data.rawTime / 60)}m {data.rawTime % 60}s
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Legend />
+                          <Bar
+                            yAxisId="left"
+                            dataKey="timeSpent"
+                            name="Total Time (hrs)"
+                            fill="var(--color-timeSpent)"
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
+                  </div>
+                  
                   <div className="space-y-4">
                     <div>
                       <div className="flex justify-between text-sm mb-1">
