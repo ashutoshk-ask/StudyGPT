@@ -10,6 +10,8 @@ import {
   mockTestAttempts,
   studyPlans,
   aiRecommendations,
+  progressHistory,
+  sectionPerformance,
   type User,
   type InsertUser,
   type Subject,
@@ -31,6 +33,10 @@ import {
   type InsertStudyPlan,
   type AiRecommendation,
   type InsertAiRecommendation,
+  type ProgressHistory,
+  type InsertProgressHistory,
+  type SectionPerformance,
+  type InsertSectionPerformance,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, sql } from "drizzle-orm";
@@ -98,6 +104,21 @@ export interface IStorage {
   getUserRecommendations(userId: string): Promise<AiRecommendation[]>;
   createRecommendation(recommendation: InsertAiRecommendation): Promise<AiRecommendation>;
   markRecommendationAsRead(id: string): Promise<void>;
+
+  // Progress history operations
+  getProgressHistory(userId: string, subjectId?: string, topicId?: string): Promise<ProgressHistory[]>;
+  createProgressHistory(history: InsertProgressHistory): Promise<ProgressHistory>;
+  getProgressTrend(userId: string, subjectId: string, days: number): Promise<ProgressHistory[]>;
+
+  // Section performance operations
+  getSectionPerformance(userId: string, subjectId?: string): Promise<SectionPerformance[]>;
+  updateSectionPerformance(userId: string, subjectId: string, sectionName: string, updates: Partial<SectionPerformance>): Promise<SectionPerformance>;
+  getWeakSections(userId: string): Promise<SectionPerformance[]>;
+
+  // Enhanced progress analytics
+  updateProgressWithHistory(userId: string, subjectId: string, topicId: string | null, updates: Partial<UserProgress>, activityType: string, activityId: string, scoreObtained?: number): Promise<UserProgress>;
+  calculateStudyStreak(userId: string): Promise<number>;
+  getOverallProgress(userId: string): Promise<{ overallProgress: number; totalStudyHours: number; studyStreak: number }>;
 
   sessionStore: any;
 }
@@ -374,6 +395,205 @@ export class DatabaseStorage implements IStorage {
       .update(aiRecommendations)
       .set({ isRead: true })
       .where(eq(aiRecommendations.id, id));
+  }
+
+  // Progress history operations
+  async getProgressHistory(userId: string, subjectId?: string, topicId?: string): Promise<ProgressHistory[]> {
+    let query = db.select().from(progressHistory).where(eq(progressHistory.userId, userId));
+    
+    if (subjectId) {
+      query = query.where(and(eq(progressHistory.userId, userId), eq(progressHistory.subjectId, subjectId)));
+    }
+    if (topicId) {
+      query = query.where(and(eq(progressHistory.userId, userId), eq(progressHistory.topicId, topicId)));
+    }
+    
+    return await query.orderBy(desc(progressHistory.createdAt));
+  }
+
+  async createProgressHistory(insertHistory: InsertProgressHistory): Promise<ProgressHistory> {
+    const [history] = await db.insert(progressHistory).values(insertHistory).returning();
+    return history;
+  }
+
+  async getProgressTrend(userId: string, subjectId: string, days: number): Promise<ProgressHistory[]> {
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - days);
+    
+    return await db
+      .select()
+      .from(progressHistory)
+      .where(
+        and(
+          eq(progressHistory.userId, userId),
+          eq(progressHistory.subjectId, subjectId),
+          sql`created_at >= ${daysAgo}`
+        )
+      )
+      .orderBy(asc(progressHistory.createdAt));
+  }
+
+  // Section performance operations
+  async getSectionPerformance(userId: string, subjectId?: string): Promise<SectionPerformance[]> {
+    let query = db.select().from(sectionPerformance).where(eq(sectionPerformance.userId, userId));
+    
+    if (subjectId) {
+      query = query.where(and(eq(sectionPerformance.userId, userId), eq(sectionPerformance.subjectId, subjectId)));
+    }
+    
+    return await query.orderBy(desc(sectionPerformance.updatedAt));
+  }
+
+  async updateSectionPerformance(userId: string, subjectId: string, sectionName: string, updates: Partial<SectionPerformance>): Promise<SectionPerformance> {
+    const existing = await db
+      .select()
+      .from(sectionPerformance)
+      .where(
+        and(
+          eq(sectionPerformance.userId, userId),
+          eq(sectionPerformance.subjectId, subjectId),
+          eq(sectionPerformance.sectionName, sectionName)
+        )
+      );
+
+    if (existing.length > 0) {
+      const [performance] = await db
+        .update(sectionPerformance)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(sectionPerformance.id, existing[0].id))
+        .returning();
+      return performance;
+    } else {
+      const [performance] = await db
+        .insert(sectionPerformance)
+        .values({
+          userId,
+          subjectId,
+          sectionName,
+          ...updates,
+        })
+        .returning();
+      return performance;
+    }
+  }
+
+  async getWeakSections(userId: string): Promise<SectionPerformance[]> {
+    return await db
+      .select()
+      .from(sectionPerformance)
+      .where(and(
+        eq(sectionPerformance.userId, userId),
+        sql`average_score < 60`
+      ))
+      .orderBy(asc(sectionPerformance.averageScore));
+  }
+
+  // Enhanced progress analytics
+  async updateProgressWithHistory(
+    userId: string,
+    subjectId: string,
+    topicId: string | null,
+    updates: Partial<UserProgress>,
+    activityType: string,
+    activityId: string,
+    scoreObtained?: number
+  ): Promise<UserProgress> {
+    // Get current progress for history tracking
+    const currentProgress = await this.getSubjectProgress(userId, subjectId);
+    
+    // Update progress
+    const updatedProgress = await this.updateProgress(userId, subjectId, topicId, updates);
+    
+    // Create history entry
+    await this.createProgressHistory({
+      userId,
+      subjectId,
+      topicId,
+      progressType: activityType,
+      activityId,
+      scoreObtained: scoreObtained ? scoreObtained.toString() : undefined,
+      timeSpent: updates.timeSpent,
+      masteryBefore: currentProgress?.mastery || "0",
+      masteryAfter: updatedProgress.mastery || "0",
+      completionBefore: currentProgress?.completionPercentage || "0",
+      completionAfter: updatedProgress.completionPercentage || "0",
+      metadata: { activityType, activityId }
+    });
+    
+    return updatedProgress;
+  }
+
+  async calculateStudyStreak(userId: string): Promise<number> {
+    // Get user's study history for the last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const recentHistory = await db
+      .select()
+      .from(progressHistory)
+      .where(
+        and(
+          eq(progressHistory.userId, userId),
+          sql`created_at >= ${thirtyDaysAgo}`
+        )
+      )
+      .orderBy(desc(progressHistory.createdAt));
+    
+    // Calculate streak from recent activity
+    let streak = 0;
+    const today = new Date();
+    const studyDates = new Set();
+    
+    recentHistory.forEach(entry => {
+      const entryDate = new Date(entry.createdAt!);
+      const dateString = entryDate.toDateString();
+      studyDates.add(dateString);
+    });
+    
+    // Count consecutive days from today backwards
+    for (let i = 0; i < 30; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(today.getDate() - i);
+      const dateString = checkDate.toDateString();
+      
+      if (studyDates.has(dateString)) {
+        streak++;
+      } else if (i > 0) { // Skip today if no activity yet
+        break;
+      }
+    }
+    
+    return streak;
+  }
+
+  async getOverallProgress(userId: string): Promise<{ overallProgress: number; totalStudyHours: number; studyStreak: number }> {
+    // Get all user progress
+    const allProgress = await this.getUserProgress(userId);
+    
+    // Calculate overall progress as weighted average
+    let totalWeightedProgress = 0;
+    let totalWeight = 0;
+    let totalStudyMinutes = 0;
+    
+    for (const progress of allProgress) {
+      const weight = 1; // Could be based on subject importance
+      totalWeightedProgress += parseFloat(progress.completionPercentage || "0") * weight;
+      totalWeight += weight;
+      totalStudyMinutes += progress.timeSpent || 0;
+    }
+    
+    const overallProgress = totalWeight > 0 ? totalWeightedProgress / totalWeight : 0;
+    const totalStudyHours = Math.floor(totalStudyMinutes / 60);
+    const studyStreak = await this.calculateStudyStreak(userId);
+    
+    // Update user record
+    await this.updateUser(userId, {
+      overallProgress: overallProgress.toString(),
+      totalStudyHours,
+      studyStreak
+    });
+    
+    return { overallProgress, totalStudyHours, studyStreak };
   }
 }
 

@@ -186,11 +186,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let correctAnswers = 0;
       let totalMarks = 0;
+      let incorrectAnswers = 0;
 
       questions.forEach((question, index) => {
         if (question && answers[index] === question.correctAnswer) {
           correctAnswers++;
           totalMarks += parseFloat(question.marks || "0");
+        } else if (answers[index]) {
+          incorrectAnswers++;
         }
       });
 
@@ -205,28 +208,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isCompleted: true
       });
 
-      // Update user progress
+      // Enhanced progress tracking with history
       if (quiz.subjectId) {
-        // Get existing progress or default values
         const existingProgress = await storage.getUserProgress(req.user.id);
         const currentProgress = existingProgress.find(p => 
           p.subjectId === quiz.subjectId && p.topicId === quiz.topicId
         );
         
-        // Calculate more realistic progress
+        // Calculate enhanced progress metrics
         const previousTimeSpent = currentProgress?.timeSpent || 0;
         const newTimeSpent = previousTimeSpent + Math.floor(timeTaken / 60);
-        const previousMastery = currentProgress ? parseFloat(currentProgress.mastery || "0") : 0;
+        const previousAttempts = currentProgress?.totalAttempts || 0;
+        const previousCorrect = currentProgress?.correctAnswers || 0;
+        const previousIncorrect = currentProgress?.incorrectAnswers || 0;
         
-        // Update progress with cumulative values
-        await storage.updateProgress(req.user.id, quiz.subjectId, quiz.topicId, {
-          completionPercentage: Math.max(
-            currentProgress ? parseFloat(currentProgress.completionPercentage || "0") : 0,
-            score
-          ).toString(), // Keep highest completion percentage achieved
-          timeSpent: newTimeSpent,
-          mastery: Math.max(previousMastery, score).toString() // Keep highest score as mastery
-        });
+        // Calculate new mastery based on weighted average of recent performance
+        const weightedScore = score * 0.4 + (parseFloat(currentProgress?.mastery || "0") * 0.6);
+        const mastery = Math.min(100, Math.max(0, weightedScore));
+        
+        // Update progress with comprehensive metrics
+        await storage.updateProgressWithHistory(
+          req.user.id,
+          quiz.subjectId,
+          quiz.topicId,
+          {
+            timeSpent: newTimeSpent,
+            mastery: mastery.toString(),
+            totalAttempts: previousAttempts + 1,
+            correctAnswers: previousCorrect + correctAnswers,
+            incorrectAnswers: previousIncorrect + incorrectAnswers,
+            averageScore: ((parseFloat(currentProgress?.averageScore || "0") * previousAttempts) + score) / (previousAttempts + 1),
+            lastStudyDate: new Date(),
+            completionPercentage: Math.min(100, ((previousAttempts + 1) * 10)).toString(), // Gradual completion
+            lastAccessed: new Date()
+          },
+          'quiz',
+          attempt.id,
+          score
+        );
+
+        // Update overall user progress
+        await storage.getOverallProgress(req.user.id);
       }
 
       res.json({ attempt, score, correctAnswers, totalQuestions: questions.length });
@@ -334,13 +356,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isCompleted: true
       });
 
+      // Enhanced mock test progress tracking with section-wise performance
+      const overallPercentage = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
+      
+      // Update section-wise performance for each subject
+      for (const section of sections) {
+        const sectionData = sectionScores[section.name];
+        const subjectId = section.subjectId || 'general'; // Map sections to subjects
+        
+        await storage.updateSectionPerformance(
+          req.user.id,
+          subjectId,
+          section.name,
+          {
+            averageScore: sectionData.percentage.toString(),
+            averageTime: (timeTaken / sections.length / 60).toString(), // Average time per section in minutes
+            totalAttempts: 1, // This will be calculated properly in storage
+            bestScore: sectionData.percentage.toString(),
+            worstScore: sectionData.percentage.toString(),
+            updatedAt: new Date()
+          }
+        );
+
+        // Update overall progress for this subject
+        const existingProgress = await storage.getUserProgress(req.user.id);
+        const currentProgress = existingProgress.find(p => p.subjectId === subjectId);
+        
+        const previousAttempts = currentProgress?.totalAttempts || 0;
+        const newMastery = sectionData.percentage * 0.3 + (parseFloat(currentProgress?.mastery || "0") * 0.7);
+        
+        await storage.updateProgressWithHistory(
+          req.user.id,
+          subjectId,
+          null, // Mock tests are cross-topic
+          {
+            timeSpent: (currentProgress?.timeSpent || 0) + Math.floor(timeTaken / 60 / sections.length),
+            mastery: Math.min(100, Math.max(0, newMastery)).toString(),
+            totalAttempts: previousAttempts + 1,
+            correctAnswers: (currentProgress?.correctAnswers || 0) + sectionData.correct,
+            incorrectAnswers: (currentProgress?.incorrectAnswers || 0) + (sectionData.total - sectionData.correct),
+            averageScore: ((parseFloat(currentProgress?.averageScore || "0") * previousAttempts) + sectionData.percentage) / (previousAttempts + 1),
+            lastStudyDate: new Date(),
+            completionPercentage: Math.min(100, Math.max(
+              parseFloat(currentProgress?.completionPercentage || "0"),
+              sectionData.percentage * 0.5 // Mock tests contribute to completion
+            )).toString(),
+            lastAccessed: new Date()
+          },
+          'mock_test',
+          attempt.id,
+          sectionData.percentage
+        );
+      }
+
+      // Update overall user progress
+      await storage.getOverallProgress(req.user.id);
+
       res.json({ 
         attempt, 
         sectionScores, 
         totalScore, 
         totalCorrect, 
         totalQuestions,
-        percentage: totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0
+        percentage: overallPercentage
       });
     } catch (error) {
       console.error("Error submitting mock test attempt:", error);
@@ -435,6 +513,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error generating study plan:", error);
       res.status(500).json({ message: "Failed to generate study plan" });
+    }
+  });
+
+  // Progress tracking routes
+  app.get("/api/progress/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const { subjectId, topicId, days = 30 } = req.query;
+      const history = await storage.getProgressHistory(req.user.id, subjectId as string, topicId as string);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching progress history:", error);
+      res.status(500).json({ message: "Failed to fetch progress history" });
+    }
+  });
+
+  app.get("/api/progress/trend/:subjectId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { days = 30 } = req.query;
+      const trend = await storage.getProgressTrend(req.user.id, req.params.subjectId, parseInt(days as string));
+      res.json(trend);
+    } catch (error) {
+      console.error("Error fetching progress trend:", error);
+      res.status(500).json({ message: "Failed to fetch progress trend" });
+    }
+  });
+
+  app.get("/api/progress/sections", isAuthenticated, async (req: any, res) => {
+    try {
+      const { subjectId } = req.query;
+      const sectionPerformance = await storage.getSectionPerformance(req.user.id, subjectId as string);
+      res.json(sectionPerformance);
+    } catch (error) {
+      console.error("Error fetching section performance:", error);
+      res.status(500).json({ message: "Failed to fetch section performance" });
+    }
+  });
+
+  app.get("/api/progress/weak-areas", isAuthenticated, async (req: any, res) => {
+    try {
+      const weakSections = await storage.getWeakSections(req.user.id);
+      res.json(weakSections);
+    } catch (error) {
+      console.error("Error fetching weak areas:", error);
+      res.status(500).json({ message: "Failed to fetch weak areas" });
+    }
+  });
+
+  app.get("/api/progress/analytics", isAuthenticated, async (req: any, res) => {
+    try {
+      const overallProgress = await storage.getOverallProgress(req.user.id);
+      const userProgress = await storage.getUserProgress(req.user.id);
+      const sectionPerformance = await storage.getSectionPerformance(req.user.id);
+      const quizAttempts = await storage.getUserQuizAttempts(req.user.id);
+      const mockTestAttempts = await storage.getUserMockTestAttempts(req.user.id);
+
+      // Calculate additional analytics
+      const totalAttempts = quizAttempts.length + mockTestAttempts.length;
+      const avgQuizScore = quizAttempts.length > 0 
+        ? quizAttempts.reduce((acc, attempt) => acc + parseFloat(attempt.score || "0"), 0) / quizAttempts.length 
+        : 0;
+      const avgMockScore = mockTestAttempts.length > 0 
+        ? mockTestAttempts.reduce((acc, attempt) => acc + parseFloat(attempt.totalScore || "0"), 0) / mockTestAttempts.length 
+        : 0;
+
+      res.json({
+        overallProgress,
+        userProgress,
+        sectionPerformance,
+        totalAttempts,
+        avgQuizScore,
+        avgMockScore,
+        quizAttemptsCount: quizAttempts.length,
+        mockTestAttemptsCount: mockTestAttempts.length
+      });
+    } catch (error) {
+      console.error("Error fetching progress analytics:", error);
+      res.status(500).json({ message: "Failed to fetch progress analytics" });
     }
   });
 

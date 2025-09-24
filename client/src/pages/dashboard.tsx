@@ -8,13 +8,25 @@ import RecentActivity from "@/components/dashboard/recent-activity";
 import StudyPlanToday from "@/components/dashboard/study-plan-today";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Calculator, Clock, FileText, Trophy } from "lucide-react";
+import { Calculator, Clock, FileText, Trophy, AlertTriangle } from "lucide-react";
 
 export default function Dashboard() {
   const { user } = useAuth();
 
   const { data: subjects } = useQuery({
     queryKey: ["/api/subjects"],
+  });
+
+  const { data: progressAnalytics } = useQuery({
+    queryKey: ["/api/progress/analytics"],
+  });
+
+  const { data: sectionPerformance } = useQuery({
+    queryKey: ["/api/progress/sections"],
+  });
+
+  const { data: weakAreas } = useQuery({
+    queryKey: ["/api/progress/weak-areas"],
   });
 
   const { data: userProgress } = useQuery({
@@ -43,15 +55,17 @@ export default function Dashboard() {
     };
   }) : [];
 
+  // Enhanced stats calculation using progress analytics
   const stats = {
-    overallProgress: user?.overallProgress || 0,
-    mockTests: Array.isArray(mockTestAttempts) ? mockTestAttempts.length : 0,
-    avgScore: Array.isArray(mockTestAttempts) && mockTestAttempts.length > 0 
-      ? mockTestAttempts.reduce((acc: number, attempt: any) => acc + parseFloat(attempt.totalScore || 0), 0) / mockTestAttempts.length 
-      : 0,
-    studyHours: user?.totalStudyHours || 0,
-    monthlyHours: Math.floor((user?.totalStudyHours || 0) * 0.2), // Estimate
-    examReady: Math.min(95, (user?.overallProgress || 0) + 10),
+    overallProgress: progressAnalytics?.overallProgress?.overallProgress || user?.overallProgress || 0,
+    mockTests: progressAnalytics?.mockTestAttemptsCount || 0,
+    avgScore: progressAnalytics?.avgMockScore || 0,
+    studyHours: progressAnalytics?.overallProgress?.totalStudyHours || user?.totalStudyHours || 0,
+    studyStreak: progressAnalytics?.overallProgress?.studyStreak || user?.studyStreak || 0,
+    totalAttempts: progressAnalytics?.totalAttempts || 0,
+    avgQuizScore: progressAnalytics?.avgQuizScore || 0,
+    examReady: Math.min(95, (progressAnalytics?.overallProgress?.overallProgress || 0) + 
+      (progressAnalytics?.overallProgress?.studyStreak > 7 ? 10 : 5)),
   };
 
   return (
@@ -84,12 +98,12 @@ export default function Dashboard() {
               />
 
               <ProgressCard
-                title="Study Hours"
-                value={`${stats.studyHours}h`}
+                title="Study Streak"
+                value={`${stats.studyStreak} days`}
                 icon={<Clock className="h-6 w-6" />}
-                subtitle={`This month: ${stats.monthlyHours}h`}
+                subtitle={`Total Hours: ${stats.studyHours}h`}
                 color="accent"
-                data-testid="card-study-hours"
+                data-testid="card-study-streak"
               />
 
               <ProgressCard
@@ -142,12 +156,55 @@ export default function Dashboard() {
               <AiRecommendations recommendations={Array.isArray(recommendations) ? recommendations : []} />
             </div>
 
-            {/* Recent Activity and Study Plan */}
+            {/* Weak Areas and Section Performance */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Weak Areas */}
+              <Card data-testid="card-weak-areas">
+                <CardHeader>
+                  <CardTitle>Areas Needing Attention</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {Array.isArray(weakAreas) && weakAreas.length > 0 ? (
+                      weakAreas.slice(0, 5).map((area: any, index: number) => (
+                        <div
+                          key={area.id}
+                          className="flex items-center justify-between p-3 bg-destructive/10 rounded-lg border border-destructive/20"
+                          data-testid={`weak-area-${index}`}
+                        >
+                          <div>
+                            <p className="font-medium text-foreground">{area.sectionName}</p>
+                            <p className="text-sm text-muted-foreground">
+                              Average: {parseFloat(area.averageScore || 0).toFixed(1)}% • {area.totalAttempts} attempts
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm font-semibold text-destructive">
+                              {parseFloat(area.averageScore || 0).toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-6 text-muted-foreground">
+                        <Trophy className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">Great job! No weak areas detected.</p>
+                        <p className="text-xs">Keep up the excellent work!</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Recent Activity */}
               <RecentActivity 
                 quizAttempts={Array.isArray(quizAttempts) ? quizAttempts.slice(0, 5) : []} 
                 mockTestAttempts={Array.isArray(mockTestAttempts) ? mockTestAttempts.slice(0, 3) : []} 
               />
+            </div>
+
+            {/* Study Plan */}
+            <div className="grid grid-cols-1 gap-6">
               <StudyPlanToday />
             </div>
           </div>

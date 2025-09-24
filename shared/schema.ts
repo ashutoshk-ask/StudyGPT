@@ -79,6 +79,49 @@ export const userProgress = pgTable("user_progress", {
   lastAccessed: timestamp("last_accessed").defaultNow(),
   mastery: decimal("mastery", { precision: 5, scale: 2 }).default("0"),
   weaknessScore: decimal("weakness_score", { precision: 5, scale: 2 }).default("0"),
+  averageScore: decimal("average_score", { precision: 5, scale: 2 }).default("0"),
+  totalAttempts: integer("total_attempts").default(0),
+  correctAnswers: integer("correct_answers").default(0),
+  incorrectAnswers: integer("incorrect_answers").default(0),
+  currentStreak: integer("current_streak").default(0),
+  bestStreak: integer("best_streak").default(0),
+  lastStudyDate: timestamp("last_study_date"),
+  improvementTrend: decimal("improvement_trend", { precision: 5, scale: 2 }).default("0"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Progress history for tracking changes over time
+export const progressHistory = pgTable("progress_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  subjectId: varchar("subject_id").references(() => subjects.id),
+  topicId: varchar("topic_id").references(() => topics.id),
+  progressType: text("progress_type").notNull(), // quiz, mock_test, study_session
+  activityId: varchar("activity_id"), // quiz/mock test attempt ID
+  scoreObtained: decimal("score_obtained", { precision: 5, scale: 2 }),
+  timeSpent: integer("time_spent_minutes"),
+  masteryBefore: decimal("mastery_before", { precision: 5, scale: 2 }),
+  masteryAfter: decimal("mastery_after", { precision: 5, scale: 2 }),
+  completionBefore: decimal("completion_before", { precision: 5, scale: 2 }),
+  completionAfter: decimal("completion_after", { precision: 5, scale: 2 }),
+  metadata: jsonb("metadata"), // Additional data like section scores, specific topics covered
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Section-wise performance tracking for mock tests
+export const sectionPerformance = pgTable("section_performance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  subjectId: varchar("subject_id").references(() => subjects.id).notNull(),
+  sectionName: text("section_name").notNull(), // Mathematics, Reasoning, English, GS
+  averageScore: decimal("average_score", { precision: 5, scale: 2 }).default("0"),
+  averageTime: decimal("average_time", { precision: 5, scale: 2 }).default("0"),
+  totalAttempts: integer("total_attempts").default(0),
+  bestScore: decimal("best_score", { precision: 5, scale: 2 }).default("0"),
+  worstScore: decimal("worst_score", { precision: 5, scale: 2 }).default("100"),
+  improvementRate: decimal("improvement_rate", { precision: 5, scale: 2 }).default("0"),
+  accuracyTrend: decimal("accuracy_trend", { precision: 5, scale: 2 }).default("0"),
+  speedTrend: decimal("speed_trend", { precision: 5, scale: 2 }).default("0"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -184,12 +227,16 @@ export const usersRelations = relations(users, ({ many }) => ({
   mockTestAttempts: many(mockTestAttempts),
   studyPlans: many(studyPlans),
   aiRecommendations: many(aiRecommendations),
+  progressHistory: many(progressHistory),
+  sectionPerformance: many(sectionPerformance),
 }));
 
 export const subjectsRelations = relations(subjects, ({ many }) => ({
   topics: many(topics),
   questions: many(questions),
   progress: many(userProgress),
+  progressHistory: many(progressHistory),
+  sectionPerformance: many(sectionPerformance),
 }));
 
 export const topicsRelations = relations(topics, ({ one, many }) => ({
@@ -199,6 +246,7 @@ export const topicsRelations = relations(topics, ({ one, many }) => ({
   }),
   questions: many(questions),
   progress: many(userProgress),
+  progressHistory: many(progressHistory),
 }));
 
 export const questionsRelations = relations(questions, ({ one }) => ({
@@ -226,6 +274,32 @@ export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
 
 export const mockTestsRelations = relations(mockTests, ({ many }) => ({
   attempts: many(mockTestAttempts),
+}));
+
+export const progressHistoryRelations = relations(progressHistory, ({ one }) => ({
+  user: one(users, {
+    fields: [progressHistory.userId],
+    references: [users.id],
+  }),
+  subject: one(subjects, {
+    fields: [progressHistory.subjectId],
+    references: [subjects.id],
+  }),
+  topic: one(topics, {
+    fields: [progressHistory.topicId],
+    references: [topics.id],
+  }),
+}));
+
+export const sectionPerformanceRelations = relations(sectionPerformance, ({ one }) => ({
+  user: one(users, {
+    fields: [sectionPerformance.userId],
+    references: [users.id],
+  }),
+  subject: one(subjects, {
+    fields: [sectionPerformance.subjectId],
+    references: [subjects.id],
+  }),
 }));
 
 // Insert schemas
@@ -281,6 +355,16 @@ export const insertAiRecommendationSchema = createInsertSchema(aiRecommendations
   createdAt: true,
 });
 
+export const insertProgressHistorySchema = createInsertSchema(progressHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSectionPerformanceSchema = createInsertSchema(sectionPerformance).omit({
+  id: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -303,3 +387,7 @@ export type StudyPlan = typeof studyPlans.$inferSelect;
 export type InsertStudyPlan = z.infer<typeof insertStudyPlanSchema>;
 export type AiRecommendation = typeof aiRecommendations.$inferSelect;
 export type InsertAiRecommendation = z.infer<typeof insertAiRecommendationSchema>;
+export type ProgressHistory = typeof progressHistory.$inferSelect;
+export type InsertProgressHistory = z.infer<typeof insertProgressHistorySchema>;
+export type SectionPerformance = typeof sectionPerformance.$inferSelect;
+export type InsertSectionPerformance = z.infer<typeof insertSectionPerformanceSchema>;

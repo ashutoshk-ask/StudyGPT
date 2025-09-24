@@ -16,6 +16,22 @@ import {
 } from "lucide-react";
 
 export default function Analytics() {
+  const { data: progressAnalytics } = useQuery({
+    queryKey: ["/api/progress/analytics"],
+  });
+
+  const { data: sectionPerformance } = useQuery({
+    queryKey: ["/api/progress/sections"],
+  });
+
+  const { data: weakAreas } = useQuery({
+    queryKey: ["/api/progress/weak-areas"],
+  });
+
+  const { data: progressHistory } = useQuery({
+    queryKey: ["/api/progress/history"],
+  });
+
   const { data: userProgress } = useQuery({
     queryKey: ["/api/progress"],
   });
@@ -32,14 +48,13 @@ export default function Analytics() {
     queryKey: ["/api/subjects"],
   });
 
-  // Calculate analytics data
-  const totalAttempts = (quizAttempts?.length || 0) + (mockTestAttempts?.length || 0);
-  const avgQuizScore = quizAttempts?.length > 0 
-    ? quizAttempts.reduce((acc: number, attempt: any) => acc + parseFloat(attempt.score || 0), 0) / quizAttempts.length 
-    : 0;
-  const avgMockScore = mockTestAttempts?.length > 0 
-    ? mockTestAttempts.reduce((acc: number, attempt: any) => acc + parseFloat(attempt.totalScore || 0), 0) / mockTestAttempts.length 
-    : 0;
+  // Enhanced analytics data from comprehensive progress tracking
+  const totalAttempts = progressAnalytics?.totalAttempts || 0;
+  const avgQuizScore = progressAnalytics?.avgQuizScore || 0;
+  const avgMockScore = progressAnalytics?.avgMockScore || 0;
+  const studyStreak = progressAnalytics?.overallProgress?.studyStreak || 0;
+  const totalStudyHours = progressAnalytics?.overallProgress?.totalStudyHours || 0;
+  const overallProgress = progressAnalytics?.overallProgress?.overallProgress || 0;
 
   // Identify weak and strong topics
   const subjectAnalysis = subjects?.map((subject: any) => {
@@ -133,19 +148,19 @@ export default function Analytics() {
                 </CardContent>
               </Card>
 
-              <Card data-testid="card-improvement-trend">
+              <Card data-testid="card-study-streak">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-muted-foreground text-sm">Trend</p>
-                      <p className="text-2xl font-bold text-accent">+5.2%</p>
+                      <p className="text-muted-foreground text-sm">Study Streak</p>
+                      <p className="text-2xl font-bold text-accent">{studyStreak} days</p>
                     </div>
                     <div className="w-12 h-12 bg-chart-4/10 rounded-lg flex items-center justify-center">
                       <TrendingUp className="h-6 w-6 text-chart-4" />
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    vs last month
+                    Study Hours: {totalStudyHours}h
                   </p>
                 </CardContent>
               </Card>
