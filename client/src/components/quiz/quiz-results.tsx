@@ -38,6 +38,8 @@ export default function QuizResults({
   const { score, correctAnswers, totalQuestions, timeTaken } = results;
   const percentage = (correctAnswers / totalQuestions) * 100;
   const avgTimePerQuestion = timeTaken ? Math.floor(timeTaken / totalQuestions) : 0;
+  const incorrectAnswers = totalQuestions - correctAnswers;
+  const accuracy = (correctAnswers / totalQuestions) * 100;
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return "text-accent";
@@ -46,9 +48,9 @@ export default function QuizResults({
   };
 
   const getScoreBadge = (score: number) => {
-    if (score >= 90) return { text: "Excellent!", variant: "default" as const };
-    if (score >= 80) return { text: "Great Job!", variant: "default" as const };
-    if (score >= 70) return { text: "Good Work!", variant: "secondary" as const };
+    if (score >= 90) return { text: "Outstanding! 🏆", variant: "default" as const };
+    if (score >= 80) return { text: "Excellent! 🌟", variant: "default" as const };
+    if (score >= 70) return { text: "Great Job! 👍", variant: "secondary" as const };
     if (score >= 60) return { text: "Keep Improving", variant: "secondary" as const };
     return { text: "Needs Practice", variant: "destructive" as const };
   };
