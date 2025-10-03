@@ -12,7 +12,15 @@
     "db:check": "node check-replit-db.js",
     "db:seed": "node server/seed.js",
     "db:seed-enhanced": "node server/enhanced-seed.js",
-    "db:setup": "npm run db:push && npm run db:seed-enhanced"
+    "db:setup": "npm run db:push && npm run db:seed-enhanced",
+    "db:inspect": "node setup-database.js",
+    "mock:create": "node create-mock-tests.js",
+    "ml:setup": "python setup-ml-training.py",
+    "ml:start-backend": "cd ml-backend && python main.py",
+    "ml:monitor": "node monitor-ml-progress.js",
+    "phase1:complete": "npm run db:setup && npm run mock:create && npm run ml:setup",
+    "dev:full": "concurrently \"npm run ml:start-backend\" \"npm run dev\"",
+    "production:setup": "npm run phase1:complete && npm run dev:full"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

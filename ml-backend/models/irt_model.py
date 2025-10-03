@@ -1,7 +1,68 @@
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from scipy.optimize import minimize
 from scipy.special import expit
+from dataclasses import dataclass
+from enum import Enum
+
+class TestType(Enum):
+    LEARNING_ADAPTIVE = "learning_adaptive"      # Adaptive for learning
+    TOPIC_WISE = "topic_wise"                   # Customized topic tests
+    SECTIONAL_MOCK = "sectional_mock"           # Customized sectional
+    FULL_MOCK_SSC = "full_mock_ssc"            # Strict SSC pattern
+
+@dataclass
+class SSCPattern:
+    """Official SSC CGL Tier-1 Pattern"""
+    total_questions: int = 100
+    total_time_minutes: int = 60
+    sections: Dict[str, Dict] = None
+    
+    def __post_init__(self):
+        if self.sections is None:
+            self.sections = {
+                "General Intelligence & Reasoning": {
+                    "questions": 25,
+                    "marks_per_question": 2,
+                    "negative_marking": 0.5,
+                    "difficulty_distribution": {"easy": 8, "medium": 12, "hard": 5},
+                    "topic_weightage": {
+                        "Analogies": 3, "Classification": 2, "Coding-Decoding": 3,
+                        "Blood Relations": 2, "Direction Sense": 2, "Logical Reasoning": 4,
+                        "Puzzles": 3, "Series": 3, "Syllogism": 3
+                    }
+                },
+                "General Awareness": {
+                    "questions": 25,
+                    "marks_per_question": 2, 
+                    "negative_marking": 0.5,
+                    "difficulty_distribution": {"easy": 10, "medium": 10, "hard": 5},
+                    "topic_weightage": {
+                        "Current Affairs": 8, "History": 4, "Geography": 4,
+                        "Polity": 3, "Economics": 2, "Science": 4
+                    }
+                },
+                "Quantitative Aptitude": {
+                    "questions": 25,
+                    "marks_per_question": 2,
+                    "negative_marking": 0.5, 
+                    "difficulty_distribution": {"easy": 6, "medium": 14, "hard": 5},
+                    "topic_weightage": {
+                        "Arithmetic": 10, "Algebra": 3, "Geometry": 4,
+                        "Trigonometry": 2, "Statistics": 3, "Data Interpretation": 3
+                    }
+                },
+                "English Comprehension": {
+                    "questions": 25,
+                    "marks_per_question": 2,
+                    "negative_marking": 0.5,
+                    "difficulty_distribution": {"easy": 8, "medium": 12, "hard": 5},
+                    "topic_weightage": {
+                        "Reading Comprehension": 5, "Grammar": 8, "Vocabulary": 7,
+                        "Error Detection": 3, "Fill in the Blanks": 2
+                    }
+                }
+            }
 
 class ItemResponseTheory:
     """
@@ -203,30 +264,263 @@ class ItemResponseTheory:
         return best_item if best_item else available_items[0]
 
 
-class ComputerizedAdaptiveTesting:
+class SSCAdaptiveTesting:
     """
-    Computerized Adaptive Testing (CAT) using IRT
+    SSC CGL Adaptive Testing System
+    Handles both learning-adaptive and strict SSC pattern tests
     """
 
-    def __init__(
-        self,
-        item_bank: List[str],
-        irt_model: Optional[ItemResponseTheory] = None
-    ):
-        self.item_bank = item_bank
-        self.irt = irt_model or ItemResponseTheory()
+    def __init__(self):
+        self.ssc_pattern = SSCPattern()
+        self.irt = ItemResponseTheory()
         self.test_sessions: Dict[str, Dict] = {}
-
-    def start_test(self, student_id: str, test_id: str):
-        """Initialize a new adaptive test session"""
-        self.test_sessions[test_id] = {
-            "student_id": student_id,
-            "items_administered": [],
-            "responses": [],
-            "current_ability": 0.0,
-            "se_ability": 1.0,
-            "num_items": 0
+        
+    def generate_test(
+        self, 
+        test_type: TestType,
+        user_id: str,
+        user_mastery: Dict[str, float],
+        customization: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Generate test based on type and user requirements"""
+        
+        if test_type == TestType.FULL_MOCK_SSC:
+            return self._generate_full_mock_ssc(user_mastery)
+        elif test_type == TestType.LEARNING_ADAPTIVE:
+            return self._generate_learning_adaptive(user_id, user_mastery, customization)
+        elif test_type == TestType.TOPIC_WISE:
+            return self._generate_topic_wise(user_mastery, customization)
+        elif test_type == TestType.SECTIONAL_MOCK:
+            return self._generate_sectional_mock(user_mastery, customization)
+    
+    def _generate_full_mock_ssc(self, user_mastery: Dict[str, float]) -> Dict[str, Any]:
+        """
+        Generate STRICT SSC CGL pattern mock test
+        - Exact question distribution
+        - Authentic difficulty levels  
+        - Real exam weightages
+        - Official time allocation
+        """
+        
+        test_structure = {
+            "test_type": "SSC CGL Tier-1 Full Mock",
+            "total_questions": self.ssc_pattern.total_questions,
+            "total_time_minutes": self.ssc_pattern.total_time_minutes,
+            "marking_scheme": {
+                "correct_marks": 2,
+                "negative_marks": -0.5,
+                "total_marks": 200
+            },
+            "sections": []
         }
+        
+        for section_name, section_data in self.ssc_pattern.sections.items():
+            section_questions = self._select_questions_for_section(
+                section_name, 
+                section_data,
+                user_mastery,
+                strict_ssc=True
+            )
+            
+            test_structure["sections"].append({
+                "name": section_name,
+                "questions": section_questions,
+                "question_count": section_data["questions"],
+                "time_allocation": self.ssc_pattern.total_time_minutes // 4,  # Equal time per section
+                "difficulty_distribution": section_data["difficulty_distribution"],
+                "instructions": self._get_ssc_instructions(section_name)
+            })
+        
+        # Add SSC-specific metadata
+        test_structure["exam_info"] = {
+            "pattern": "SSC CGL Tier-1",
+            "negative_marking": True,
+            "sectional_timing": False,
+            "calculator_allowed": False,
+            "rough_sheets": 3,
+            "instructions": self._get_general_ssc_instructions()
+        }
+        
+        return test_structure
+    
+    def _generate_learning_adaptive(
+        self, 
+        user_id: str, 
+        user_mastery: Dict[str, float],
+        customization: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Generate adaptive test for learning (not exam simulation)
+        - Questions adapt based on performance
+        - Focus on weak areas
+        - Immediate feedback
+        - Personalized difficulty
+        """
+        
+        weak_topics = [topic for topic, mastery in user_mastery.items() if mastery < 5.0]
+        focus_area = customization.get('focus_area', 'weak_topics')
+        question_count = customization.get('question_count', 30)
+        
+        adaptive_questions = []
+        
+        if focus_area == 'weak_topics':
+            # 70% from weak topics, 30% mixed
+            weak_count = int(question_count * 0.7)
+            mixed_count = question_count - weak_count
+            
+            for topic in weak_topics[:3]:  # Top 3 weak topics
+                topic_questions = weak_count // min(3, len(weak_topics))
+                questions = self._select_adaptive_questions(
+                    topic, user_mastery.get(topic, 1.0), topic_questions
+                )
+                adaptive_questions.extend(questions)
+        
+        return {
+            "test_type": "Adaptive Learning Test",
+            "questions": adaptive_questions,
+            "adaptive_features": {
+                "difficulty_adjustment": True,
+                "immediate_feedback": True,
+                "hint_system": True,
+                "step_by_step_solutions": True
+            },
+            "learning_objectives": weak_topics
+        }
+
+    def _select_questions_for_section(
+        self, 
+        section_name: str, 
+        section_data: Dict,
+        user_mastery: Dict[str, float],
+        strict_ssc: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Select questions maintaining SSC pattern compliance"""
+        
+        selected_questions = []
+        topic_weightage = section_data["topic_weightage"]
+        difficulty_dist = section_data["difficulty_distribution"]
+        
+        for topic, weight in topic_weightage.items():
+            # Calculate questions needed for this topic
+            questions_needed = weight
+            
+            # Distribute by difficulty
+            if strict_ssc:
+                easy_count = int(questions_needed * difficulty_dist["easy"] / sum(difficulty_dist.values()))
+                medium_count = int(questions_needed * difficulty_dist["medium"] / sum(difficulty_dist.values()))
+                hard_count = questions_needed - easy_count - medium_count
+            else:
+                # Adaptive distribution based on user mastery
+                user_level = user_mastery.get(topic, 3.0)
+                if user_level < 3.0:
+                    easy_count = int(questions_needed * 0.6)
+                    medium_count = int(questions_needed * 0.3)
+                    hard_count = questions_needed - easy_count - medium_count
+                elif user_level < 6.0:
+                    easy_count = int(questions_needed * 0.3)
+                    medium_count = int(questions_needed * 0.5)
+                    hard_count = questions_needed - easy_count - medium_count
+                else:
+                    easy_count = int(questions_needed * 0.2)
+                    medium_count = int(questions_needed * 0.4)
+                    hard_count = questions_needed - easy_count - medium_count
+            
+            # Select questions with appropriate difficulty
+            topic_questions = self._get_questions_by_difficulty(
+                topic, easy_count, medium_count, hard_count, strict_ssc
+            )
+            
+            selected_questions.extend(topic_questions)
+        
+        return selected_questions
+    
+    def _get_questions_by_difficulty(
+        self, 
+        topic: str, 
+        easy_count: int, 
+        medium_count: int, 
+        hard_count: int,
+        strict_ssc: bool
+    ) -> List[Dict[str, Any]]:
+        """Get questions by difficulty level for a topic"""
+        questions = []
+        
+        # Easy questions (difficulty 0.2-0.4)
+        for i in range(easy_count):
+            questions.append({
+                "topic": topic,
+                "difficulty": np.random.uniform(0.2, 0.4) if not strict_ssc else 0.3,
+                "type": "basic_concept",
+                "marks": 2,
+                "time_allocation": 45  # seconds
+            })
+        
+        # Medium questions (difficulty 0.4-0.7)
+        for i in range(medium_count):
+            questions.append({
+                "topic": topic,
+                "difficulty": np.random.uniform(0.4, 0.7) if not strict_ssc else 0.55,
+                "type": "application",
+                "marks": 2,
+                "time_allocation": 60  # seconds
+            })
+        
+        # Hard questions (difficulty 0.7-0.9)
+        for i in range(hard_count):
+            questions.append({
+                "topic": topic,
+                "difficulty": np.random.uniform(0.7, 0.9) if not strict_ssc else 0.8,
+                "type": "complex_problem",
+                "marks": 2,
+                "time_allocation": 90  # seconds
+            })
+        
+        return questions
+    
+    def _get_ssc_instructions(self, section_name: str) -> List[str]:
+        """Get authentic SSC CGL instructions for each section"""
+        instructions = {
+            "General Intelligence & Reasoning": [
+                "This section contains 25 questions on logical reasoning",
+                "Each question carries 2 marks",
+                "0.5 marks will be deducted for each wrong answer",
+                "Use logical thinking and pattern recognition"
+            ],
+            "General Awareness": [
+                "This section tests your knowledge of current affairs and static GK",
+                "Questions cover history, geography, politics, economics, and science",
+                "Stay updated with recent developments",
+                "Each question carries 2 marks with 0.5 negative marking"
+            ],
+            "Quantitative Aptitude": [
+                "This section contains mathematical problems",
+                "Focus on accuracy and speed",
+                "Calculator is not allowed",
+                "Each question carries 2 marks with 0.5 negative marking"
+            ],
+            "English Comprehension": [
+                "This section tests English language skills",
+                "Includes grammar, vocabulary, and comprehension",
+                "Read questions carefully",
+                "Each question carries 2 marks with 0.5 negative marking"
+            ]
+        }
+        return instructions.get(section_name, [])
+    
+    def _get_general_ssc_instructions(self) -> List[str]:
+        """Get general SSC CGL exam instructions"""
+        return [
+            "Total Duration: 60 minutes",
+            "Total Questions: 100",
+            "Total Marks: 200",
+            "Each question carries 2 marks",
+            "0.5 marks deducted for wrong answers",
+            "No negative marking for unattempted questions",
+            "Calculator not allowed",
+            "Rough work can be done on provided sheets",
+            "All questions are compulsory",
+            "Choose the most appropriate answer"
+        ]
 
     def get_next_item(self, test_id: str) -> Optional[str]:
         """Get next item for adaptive test"""

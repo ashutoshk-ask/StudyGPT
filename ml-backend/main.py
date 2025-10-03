@@ -12,7 +12,9 @@ from routers import (
     recommendations,
     analytics,
     knowledge_graph,
-    emotional_intelligence
+    emotional_intelligence,
+    collaborative_learning,
+    multimodal_learning
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -72,6 +74,8 @@ app.include_router(recommendations.router, prefix=f"/api/{settings.API_VERSION}/
 app.include_router(analytics.router, prefix=f"/api/{settings.API_VERSION}/analytics", tags=["Advanced Analytics"])
 app.include_router(knowledge_graph.router, prefix=f"/api/{settings.API_VERSION}/knowledge-graph", tags=["Knowledge Graph"])
 app.include_router(emotional_intelligence.router, prefix=f"/api/{settings.API_VERSION}/emotional-intelligence", tags=["Emotional Intelligence"])
+app.include_router(collaborative_learning.router, prefix=f"/api/{settings.API_VERSION}/collaborative", tags=["Collaborative Learning"])
+app.include_router(multimodal_learning.router, prefix=f"/api/{settings.API_VERSION}/multimodal", tags=["Multi-modal Learning"])
 
 if __name__ == "__main__":
     import uvicorn

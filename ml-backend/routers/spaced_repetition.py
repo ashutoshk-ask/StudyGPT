@@ -1,14 +1,27 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
-from models.spaced_repetition import AdaptiveSM2Plus, ResponseQuality
+from models.spaced_repetition import AdvancedSpacedRepetition, ResponseQuality
 import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-adaptive_sr = AdaptiveSM2Plus()
+advanced_sr = AdvancedSpacedRepetition()
+
+class EnhancedPerformanceData(BaseModel):
+    accuracy: float = 0.5
+    speed_score: float = 0.5
+    retention_rate: float = 0.5
+    max_difficulty: float = 0.3
+    exam_weight: float = 1.0
+
+class AdvancedScheduleRequest(BaseModel):
+    user_id: str
+    topic: str
+    mastery_level: float
+    performance_data: EnhancedPerformanceData
 
 class ReviewStateInput(BaseModel):
     repetition: int = 0
@@ -34,6 +47,58 @@ class ReviewItemInput(BaseModel):
 class OptimizeSessionRequest(BaseModel):
     available_minutes: int
     review_items: List[ReviewItemInput]
+
+@router.post("/advanced-schedule")
+async def schedule_advanced_review(request: AdvancedScheduleRequest):
+    """
+    Schedule review using Advanced Spaced Repetition with mastery-based customization
+    """
+    try:
+        performance_data = request.performance_data.dict()
+        
+        schedule = advanced_sr.calculate_review_schedule(
+            user_id=request.user_id,
+            topic=request.topic,
+            mastery_level=request.mastery_level,
+            performance_data=performance_data
+        )
+
+        return {
+            "user_id": request.user_id,
+            "topic": request.topic,
+            "mastery_level": request.mastery_level,
+            "review_schedule": {
+                "next_review": schedule.next_review.isoformat(),
+                "ease_factor": schedule.ease_factor,
+                "interval_days": schedule.interval_days,
+                "review_count": schedule.review_count,
+                "mastery_threshold": schedule.mastery_threshold,
+                "priority_score": schedule.priority_score
+            },
+            "algorithm": "Advanced SR with Mastery Integration"
+        }
+    except Exception as e:
+        logger.error(f"Advanced schedule error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/due-reviews/{user_id}")
+async def get_user_due_reviews(user_id: str):
+    """
+    Get all topics due for review for a specific user, sorted by priority
+    """
+    try:
+        due_reviews = advanced_sr.get_due_reviews(user_id)
+        
+        return {
+            "user_id": user_id,
+            "due_reviews": due_reviews,
+            "count": len(due_reviews),
+            "urgent_reviews": [r for r in due_reviews if r["overdue_hours"] > 24],
+            "algorithm": "Advanced SR Priority Sorting"
+        }
+    except Exception as e:
+        logger.error(f"Due reviews error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/schedule-review")
 async def schedule_review(request: ScheduleReviewRequest):
